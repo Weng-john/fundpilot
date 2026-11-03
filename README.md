@@ -1,0 +1,64 @@
+# FundPilot
+
+An open, modular framework for researching and (eventually) operating crypto
+margin-funding / stablecoin lending strategies. First target: **Bitfinex USDt margin funding**.
+
+The central research question:
+
+> Can an AI-assisted funding optimisation system consistently outperform simple funding
+> strategies after fees, execution uncertainty, capital utilisation, liquidity constraints
+> and operational risk?
+
+FundPilot does **not** assume the answer is yes.
+
+## Status
+
+| Phase | Scope | State |
+|---|---|---|
+| 1 Foundation | tooling, CI, settings, Bitfinex public adapter, DB schema, collection, backfill, data quality, retention | ✅ implemented, tested with mocked responses |
+| 2–7 | baselines, backtester, paper trading, risk, ML, RL, agent, live | not started — see [ROADMAP.md](ROADMAP.md) |
+
+**Important limitations**
+
+* The Bitfinex adapter has **not yet been run against the live API**, and several unit/format
+  assumptions (e.g. the `fUST` symbol, funding-stats FRR scale) are unverified. See
+  [docs/bitfinex-integration.md](docs/bitfinex-integration.md).
+* There is no trading code. Nothing in this repository can place, modify or cancel orders.
+* No market data or performance results are included or claimed.
+
+## Quick start (no API keys needed)
+
+```bash
+uv sync
+uv run fundpilot db upgrade        # SQLite at ./data/fundpilot.sqlite by default
+uv run fundpilot collect --once    # public Bitfinex funding data for fUST
+uv run fundpilot status
+uv run pytest                      # all tests use mocked exchange responses
+```
+
+PostgreSQL via Docker:
+
+```bash
+docker compose up -d --build       # db + migrate + collector
+```
+
+More: [setup](docs/setup.md) · [architecture](docs/architecture.md) ·
+[database](docs/database.md) · [Bitfinex integration](docs/bitfinex-integration.md) ·
+[deployment](docs/deployment.md) · [security](docs/security.md) ·
+[risk management](docs/risk-management.md) · [strategy guide](docs/strategy-development.md) ·
+[backtesting](docs/backtesting.md) · [ML/RL guide](docs/ml-rl-guide.md)
+
+## Design principles
+
+* All rates are **daily decimal fractions** internally; APR/APY are derived, and APY is labelled
+  a hypothetical upper bound.
+* `Decimal` for every financial value (JSON is parsed with `parse_float=Decimal`); aware UTC
+  timestamps only.
+* Every stored market row carries `origin` (`exchange_api` / `reconstructed` / `synthetic`).
+* Idempotent ingestion; per-job failure isolation recorded in `ingestion_runs`.
+* Exchange-specific logic stays inside `fundpilot.exchanges.<exchange>`.
+* Safe defaults: `dry_run`, no credential settings, destructive operations require `--confirm`.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Nothing here is investment advice.
