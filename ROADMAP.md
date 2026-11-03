@@ -8,7 +8,7 @@ documented, and CI is green.
 | 1 | Foundation: tooling, CI, settings, Bitfinex public adapter, schema, collection pipeline | **Implemented** (API assumptions pending verification) |
 | 2 | Quantitative baselines: strategy interface, 5 baselines, event-driven backtester, metrics | **Implemented** (no real-data results yet: no stored exchange data) |
 | 3 | Paper trading: virtual execution, portfolio tracking, risk manager, alerts | **Implemented** (not yet run against live data: Bitfinex unreachable from dev env) |
-| 4 | Machine learning: features, rate forecasting, fill probability, calibration | Not started |
+| 4 | Machine learning: features, rate forecasting, fill probability, calibration | **Implemented** (evaluated only on synthetic demo data so far) |
 | 5 | Reinforcement learning: Gymnasium env, PPO vs baselines | Not started |
 | 6 | AI agent: summaries, explanations, reports (no execution access) | Not started |
 | 7 | Live funding: authenticated adapter, execution gateway, approvals, security review | Not started — requires explicit human approval |

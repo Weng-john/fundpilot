@@ -22,6 +22,7 @@ src/fundpilot/
 ├── backtesting/         # point-in-time feed, simulator, scenarios, metrics, experiments, synthetic data
 ├── risk/                # RiskManager, limits, health blockers
 ├── execution/           # ExecutionGateway (dry_run/paper; live refused), controls, approvals
+├── ml/                  # features, datasets (label provenance), models, walk-forward, registry
 ├── paper/               # live market source, health monitor, paper trading engine
 └── data/
     ├── types.py         # ExactDecimal / UTCDateTime portable column types
@@ -35,7 +36,7 @@ src/fundpilot/
 migrations/              # Alembic revisions
 ```
 
-Planned (not yet present): `optimization/`, `ml/`, `rl/`,
+Planned (not yet present): `optimization/`, `rl/`,
 `agents/`, `apps/api`, `apps/web`.
 
 ## Data flow (Phase 1)

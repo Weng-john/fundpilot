@@ -18,7 +18,8 @@ FundPilot does **not** assume the answer is yes.
 | 1 Foundation | tooling, CI, settings, Bitfinex public adapter, DB schema, collection, backfill, data quality, retention | ✅ implemented, tested with mocked responses |
 | 2 Baselines | strategy interface, 5 baseline strategies, event-driven backtester with 3 execution scenarios, metrics, reproducible experiments | ✅ implemented; **no real-data results yet** |
 | 3 Paper trading | virtual execution on live data, independent risk manager, execution gateway (dry-run/paper; live refused), idempotency, audit log, manual approvals, emergency stop, alerts | ✅ implemented, tested with scripted data |
-| 4–7 | ML, RL, agent, live | not started — see [ROADMAP.md](ROADMAP.md) |
+| 4 Machine learning | point-in-time features, rate forecasting and fill-probability models (baselines + LightGBM), walk-forward evaluation, calibration, registry, leakage guard | ✅ implemented; no real-data evaluation yet |
+| 5–7 | RL, agent, live | not started — see [ROADMAP.md](ROADMAP.md) |
 
 **Important limitations**
 
