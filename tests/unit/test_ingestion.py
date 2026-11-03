@@ -64,3 +64,32 @@ def test_run_forever_respects_iterations(sessions: sessionmaker[Session]) -> Non
     collector = MarketDataCollector(FakeAdapter(), sessions, _settings(), clock=lambda: FIXED_NOW)
     collector.run_forever(iterations=2, sleep=sleeps.append)
     assert len(sleeps) == 1
+
+
+def test_trading_candle_job_when_adapter_supports_it(sessions: sessionmaker[Session]) -> None:
+    from decimal import Decimal  # noqa: PLC0415
+
+    from fundpilot.core.models import TradingCandle  # noqa: PLC0415
+
+    class WithCandles(FakeAdapter):
+        def get_trading_candles(
+            self, pair: str, timeframe: str, *, limit: int | None = None, **_: object
+        ) -> list[TradingCandle]:
+            return [
+                TradingCandle(
+                    exchange="bitfinex",
+                    symbol=pair,
+                    timeframe=timeframe,
+                    open_time=FIXED_NOW,
+                    open=Decimal(1),
+                    close=Decimal(1),
+                    high=Decimal(1),
+                    low=Decimal(1),
+                    volume=Decimal(1),
+                )
+            ]
+
+    collector = MarketDataCollector(WithCandles(), sessions, _settings(), clock=lambda: FIXED_NOW)
+    results = [r for r in collector.collect_once() if r.job == "trading_candles"]
+    assert [r.symbol for r in results] == ["tBTCUSD", "tETHUSD"]
+    assert all(r.status == "success" and r.rows_inserted == 1 for r in results)
