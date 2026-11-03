@@ -46,7 +46,29 @@ Sources: docs.bitfinex.com fetched as `.md` with `curl`, plus live API calls. Fu
   - About 90 % are 2-day loans, at roughly 6 % APR.
   - The FRR at the time was ~9.2 % APR, above most traded rates.
 - Reconstructed FRR tickers: 729 rows (`origin=reconstructed`). **Next-step 2 is done.**
-- Next-step 3 (real-data backtest) was started; output goes to `experiments/outputs/real_baselines_30d/` (git-ignored). If it is missing, re-run step 3.
+- **Step 3 is done.** The first real-data backtest ran on 2026-11-03 in about 1 minute.
+  - Window: 2026-10-05 → 11-03, 483k trades, 698 reconstructed FRR tickers, no order books.
+  - Output goes to `experiments/outputs/real_baselines_30d/`, which is git-ignored. Re-run step 3 to regenerate it.
+  - Results are SIMULATED and RECONSTRUCTED. Net annualised yield, % (conservative / neutral / optimistic):
+
+    | strategy | cons. | neutral | optim. |
+    |---|---|---|---|
+    | frr_2d (baseline) | 2.32 | 2.58 | 2.72 |
+    | fixed 0.00015/d 2d | 4.27 | 4.42 | 4.29 |
+    | fixed 0.00020/d 2d | 4.61 | 4.92 | 4.93 |
+    | fixed 0.00025/d 120d | 4.44 | 5.95 | 6.02 |
+    | adaptive ladder | 5.29 | 5.91 | 6.02 |
+
+  - **Caveat — the FRR baseline is probably underestimated.** The simulator fills FRR offers only when trades print at or above the FRR. The FRR (~9 % APR) sat above most trade rates (~6 % APR), so FRR utilisation came out at only ~27–31 %. Real Bitfinex FRR offers are matched by FRR-based loans, which the model does not represent. So "excess vs FRR" is not trustworthy yet. Comparisons among the fixed-rate and ladder strategies are more meaningful.
+  - **Other caveats:**
+    - only one month of data, with no out-of-sample split;
+    - no queue information;
+    - early-repayment hazards are assumptions;
+    - the ladder's fill ratio is low in the conservative scenario (37 %) because it reprices often.
+  - Suggested follow-ups:
+    - model FRR-offer matching better, or use a fixed-rate baseline that sits at the median traded rate;
+    - extend the backfill to 6–12 months and evaluate walk-forward;
+    - add an `optimization/` sweep over fixed rate × period.
 
 ## Next steps (in order)
 
