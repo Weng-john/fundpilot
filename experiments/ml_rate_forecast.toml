@@ -1,0 +1,13 @@
+# Task 1: FRR forecasting, walk-forward out-of-sample evaluation vs. baselines.
+name = "rate_forecast_1h"
+task = "rate_forecast"
+symbol = "fUST"
+start = "2026-01-01T00:00:00+00:00"
+end = "2026-01-15T00:00:00+00:00"
+step_seconds = 300
+horizon_seconds = 3600       # predict FRR one hour ahead
+sample_every_seconds = 1800
+n_splits = 4
+allow_synthetic = false
+register = true
+models_dir = "models"

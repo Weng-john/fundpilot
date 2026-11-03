@@ -355,6 +355,21 @@ def cmd_alerts(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ml(settings: Settings, args: argparse.Namespace) -> int:
+    from fundpilot.ml import pipeline  # noqa: PLC0415 - optional `ml` extra
+
+    cfg = pipeline.MLConfig.from_toml(Path(args.config))
+    output = Path(args.output) if args.output else None
+    if args.synthetic_demo:
+        report, model_dir, path = pipeline.run(cfg, None, synthetic_demo=True, output=output)
+    else:
+        with _sessions(settings) as sessions, session_scope(sessions) as session:
+            report, model_dir, path = pipeline.run(cfg, session, output=output)
+    _print(report.to_dict())
+    print(f"report: {path}; model: {model_dir}", file=sys.stderr)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fundpilot", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -437,6 +452,16 @@ def build_parser() -> argparse.ArgumentParser:
     al = sub.add_parser("alerts", help="recent alerts")
     al.add_argument("--limit", type=int, default=50)
     al.set_defaults(func=cmd_alerts)
+
+    ml = sub.add_parser("ml", help="train and evaluate ML models (walk-forward, out-of-sample)")
+    ml.add_argument("config", help="ML TOML file (task = rate_forecast | fill_probability)")
+    ml.add_argument("--output", default=None)
+    ml.add_argument(
+        "--synthetic-demo",
+        action="store_true",
+        help="use generated SYNTHETIC data (pipeline demo only)",
+    )
+    ml.set_defaults(func=cmd_ml)
 
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser

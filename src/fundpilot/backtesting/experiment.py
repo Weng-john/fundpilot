@@ -70,6 +70,32 @@ STRATEGY_TYPES: dict[str, StrategyFactory] = {
 }
 
 
+def _fill_aware(p: dict[str, Any]) -> Strategy:
+    from fundpilot.ml.strategy import FillAwareRateStrategy  # noqa: PLC0415 - optional extra
+
+    return FillAwareRateStrategy(
+        model_dir=Path(str(p["model_dir"])),
+        period_days=int(p.get("period_days", 2)),
+        min_probability=float(p.get("min_probability", 0.2)),
+    )
+
+
+STRATEGY_TYPES["fill_aware"] = _fill_aware
+
+
+class LeakageError(ValueError):
+    """A learned strategy's training data overlaps the evaluation window."""
+
+
+def check_leakage(strategy: Strategy, start: datetime) -> None:
+    training_end = getattr(strategy, "training_end", None)
+    if isinstance(training_end, datetime) and training_end >= start:
+        raise LeakageError(
+            f"{strategy.name} was trained on data up to {training_end.isoformat()}, which is "
+            f"not before the backtest start {start.isoformat()}; use a later window"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class StrategySpec:
     id: str
@@ -268,6 +294,7 @@ def run_experiment(
         metrics_by_id: dict[str, tuple[str, Metrics, int]] = {}
         for spec in config.strategies:
             strategy = spec.build()  # fresh instance: strategies may be stateful
+            check_leakage(strategy, config.start)
             result = FundingSimulator(strategy, scenario, config.simulation, constraints).run(
                 states
             )
