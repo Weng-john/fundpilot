@@ -23,6 +23,7 @@ src/fundpilot/
 ├── risk/                # RiskManager, limits, health blockers
 ├── execution/           # ExecutionGateway (dry_run/paper; live refused), controls, approvals
 ├── ml/                  # features, datasets (label provenance), models, walk-forward, registry
+├── agents/              # analytics, reports, OpenAI-compatible client, read-only tools, recommendations
 ├── rl/                  # Gymnasium env, CEM/PPO policies, PolicyStrategy, evaluation
 ├── paper/               # live market source, health monitor, paper trading engine
 └── data/
@@ -37,8 +38,7 @@ src/fundpilot/
 migrations/              # Alembic revisions
 ```
 
-Planned (not yet present): `optimization/`,
-`agents/`, `apps/api`, `apps/web`.
+Planned (not yet present): `optimization/`, `apps/api`, `apps/web`.
 
 ## Data flow (Phase 1)
 

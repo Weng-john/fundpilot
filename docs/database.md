@@ -50,6 +50,13 @@ results can never be confused with live results.
 | `alerts` | risk / operational alerts (deduplicated per code within 30 min) |
 | `paper_account_state` | serialised virtual account so paper trading resumes after restarts |
 
+## Agent (Phase 6, migration `0003`)
+
+| Table | Purpose |
+|---|---|
+| `agent_recommendations` | validated proposals (`proposed` / `accepted` / `rejected`), never auto-applied |
+| `agent_activity` | log of reports and questions with tool calls |
+
 ## Retention
 
 `fundpilot prune <dataset> --older-than-days N` reports what *would* be deleted.
