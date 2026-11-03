@@ -17,13 +17,12 @@ from fundpilot.core.models import (
 )
 from fundpilot.core.time import to_ms, utc_now
 from fundpilot.exchanges.bitfinex import parsers
-from fundpilot.exchanges.bitfinex.client import BitfinexRestClient
+from fundpilot.exchanges.bitfinex.client import BitfinexRestClient, default_limiters
 from fundpilot.exchanges.bitfinex.symbols import (
     CANDLE_TIMEFRAMES,
     funding_candle_key,
     validate_funding_symbol,
 )
-from fundpilot.exchanges.ratelimit import TokenBucket
 
 AGGREGATED_PRECISIONS = frozenset({"P0", "P1", "P2", "P3", "P4"})
 BOOK_LENGTHS = frozenset({1, 25, 100})  # per official SDK type hints
@@ -55,7 +54,7 @@ class BitfinexPublicAdapter:
             settings.bitfinex_public_rest_url,
             timeout=settings.bitfinex_timeout_seconds,
             max_retries=settings.bitfinex_max_retries,
-            rate_limiter=TokenBucket(settings.bitfinex_requests_per_minute),
+            limiters=default_limiters(settings.bitfinex_rate_limit_safety),
             rate_limit_cooldown=settings.bitfinex_rate_limit_cooldown_seconds,
         )
         return cls(

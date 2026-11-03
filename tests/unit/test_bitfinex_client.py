@@ -8,7 +8,11 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from fundpilot.exchanges.bitfinex.client import BitfinexRestClient
+from fundpilot.exchanges.bitfinex.client import (
+    ENDPOINT_LIMITS,
+    BitfinexRestClient,
+    default_limiters,
+)
 from fundpilot.exchanges.errors import (
     ExchangeAPIError,
     ExchangeUnavailableError,
@@ -153,3 +157,37 @@ def test_token_bucket_cooldown_blocks() -> None:
     bucket.cooldown(30)
     bucket.acquire()
     assert clock.now >= 30
+
+
+def test_documented_rate_limit_object_is_detected() -> None:
+    calls = {"n": 0}
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(429, json={"error": "ERR_RATE_LIMIT"})
+        return httpx.Response(200, json=[1])
+
+    client, clock = make_client(handler)
+    assert client.get("platform/status") == [1]
+    assert sum(clock.sleeps) >= 60.0
+
+
+def test_error_object_without_rate_limit_is_terminal() -> None:
+    client, _ = make_client(lambda _: httpx.Response(400, json={"error": "ERR_PARAMS"}))
+    with pytest.raises(ExchangeAPIError):
+        client.get("ticker/fUST")
+
+
+def test_per_endpoint_limiters() -> None:
+    limiters = default_limiters(safety=0.5)
+    assert ENDPOINT_LIMITS["trades/"] == 15 and ENDPOINT_LIMITS["book/"] == 240
+    client = BitfinexRestClient(
+        "https://example.invalid/v2",
+        limiters=limiters,
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=[])),
+    )
+    assert client._limiter_for("trades/fUST/hist") is limiters["trades/"]
+    assert client._limiter_for("book/fUST/P0") is limiters["book/"]
+    assert client._limiter_for("funding/stats/fUST/hist") is limiters["funding/stats/"]
+    assert client._limiter_for("something/else") is limiters[""]
