@@ -16,6 +16,7 @@ documented, and CI is green.
 ## Phase 1 follow-ups
 
 * Verify assumptions A1–A15 in `docs/bitfinex-integration.md` against official docs / live API.
-* WebSocket subscriptions with reconnection (public funding book/trades).
-* BTC/ETH volatility indicators (from trading candles) for the feature set.
-* Minimal FastAPI read-only API (`apps/api`) for the dashboard.
+* ~~WebSocket subscriptions with reconnection~~ — done (`fundpilot stream`).
+* ~~BTC/ETH volatility indicators~~ — done (trading candles → `btc_rv_24h`, `eth_rv_24h`).
+* ~~Dashboard API and UI~~ — done (`fundpilot serve`, `apps/web`).
+* Optional `optimization/` module (SciPy / OR-Tools allocation) — not started.

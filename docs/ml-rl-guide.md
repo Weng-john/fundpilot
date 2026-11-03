@@ -13,6 +13,9 @@ includes them.
 * Features are point-in-time (`ml.features.FeatureBuilder` sees only the current and earlier
   states) and use **time-based** windows (1 h / 6 h / 24 h), so they mean the same thing at any
   sampling cadence (training vs. live decision interval).
+* External indicators: annualised realised volatility of BTC and ETH over 24 h from **completed**
+  1 h trading candles (a candle becomes usable only at its close time), exposed as
+  `MarketState.indicators` and the features `btc_rv_24h`, `eth_rv_24h`.
 * Label provenance is explicit and stored with every model:
 
 | `label_source` | Origin | Ground truth? |

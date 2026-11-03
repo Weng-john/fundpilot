@@ -35,6 +35,25 @@ Open an *Exchange API verification* issue to promote anything to verified.
 | Funding trades | `trades/{fSYM}/hist?limit&start&end&sort` | `[ID, MTS, AMOUNT, RATE, PERIOD]` | SDK |
 | Candles | `candles/{key}/hist?limit&start&end&sort` | `[MTS, OPEN, CLOSE, HIGH, LOW, VOLUME]` | SDK |
 
+| Trading candles (volatility) | `candles/trade:{tf}:{tPAIR}/hist` | same 6-field layout | SDK |
+| Trading ticker (depeg check) | `ticker/{tPAIR}` | 10 fields, `LAST_PRICE` at index 6 | SDK |
+
+## Public WebSocket (`exchanges/bitfinex/ws.py`)
+
+| Item | Detail | Status |
+|---|---|---|
+| Subscribe | `{"event":"subscribe","channel":"ticker"\|"trades"\|"book","symbol":"fUST",...}`; book adds `prec`, `freq`, `len` (1/25/100/250) | SDK |
+| Data frames | `[chanId, payload]`; heartbeat `[chanId,"hb"]`; book checksum `[chanId,"cs",n]` | SDK |
+| Funding trades | snapshot = list of `[ID,MTS,AMOUNT,RATE,PERIOD]`; updates `[chanId,"fte"\|"ftu",row]` | SDK |
+| Funding book | snapshot = list of `[RATE,PERIOD,COUNT,AMOUNT]`, update = one row | SDK |
+| Reconnect request | `{"event":"info","code":20051}` | SDK |
+| Level removal | update with `COUNT = 0` removes the level | Unverified |
+| Maintenance | info codes 20060 (start) / 20061 (end) | Unverified |
+
+The stream reconnects with exponential back-off, treats 30 s of silence as a dead connection,
+clears book state on reconnect and re-subscribes. `fundpilot stream` persists trades continuously
+and ticker/book snapshots every `--flush-every` seconds.
+
 ## Assumptions that need verification
 
 | # | Assumption | Where it is used | Status |
@@ -53,6 +72,7 @@ Open an *Exchange API verification* issue to promote anything to verified.
 | A12 | Funding period range 2–120 days | quality checks | Search ([What is Margin Funding](https://support.bitfinex.com/hc/en-us/articles/214441185-What-is-Margin-Funding)) |
 | A13 | Minimum offer USD 150 equivalent | (Phase 3+ strategy constraints) | Search (same) |
 | A14 | Lender fee 15 % of interest, 18 % for hidden offers | (Phase 2 fee model) | Search ([fees](https://support.bitfinex.com/hc/en-us/articles/213919589-What-fees-do-you-charge-)) |
+| A16 | USDt/USD trading pair code `tUSTUSD` (depeg check) and `tBTCUSD`/`tETHUSD` (volatility) | paper config, `FUNDPILOT_VOLATILITY_PAIRS` | Unverified |
 | A15 | Interest is calculated to the second | `accrued_interest` | Search ([interest calc](https://support.bitfinex.com/hc/en-us/articles/213918989-How-is-Funding-interest-calculated-on-Bitfinex)) |
 
 ### How to verify (once the hosts are reachable)

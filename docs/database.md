@@ -23,6 +23,7 @@ PostgreSQL is the target; SQLite is supported for tests and zero-setup local run
 | `funding_stats` | exchange, symbol, observed_at | `frr_raw` as reported, `frr` normalised |
 | `funding_candles` | exchange, candle_key, open_time | OHLC of rates |
 | `funding_trades` | exchange, symbol, trade_id | signed `amount` as reported |
+| `trading_candles` | exchange, symbol, timeframe, open_time | BTC/ETH 1h candles for volatility (migration `0004`) |
 
 All have `origin` with CHECK ∈ (`exchange_api`, `reconstructed`, `synthetic`).
 
