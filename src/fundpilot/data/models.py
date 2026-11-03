@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -329,4 +330,165 @@ class FundingInterestPaymentRow(Base):
     __table_args__ = (
         UniqueConstraint("account", "mode", "exchange", "external_id"),
         CheckConstraint(f"mode IN {_ACCOUNT_MODES}", name="mode"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Operations: controls, approvals, execution audit, alerts, paper account state
+# ---------------------------------------------------------------------------
+class ControlFlagRow(Base):
+    """Persistent operator switches, e.g. ``emergency_stop``."""
+
+    __tablename__ = "control_flags"
+
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+    updated_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+
+
+class ApprovalRequestRow(Base):
+    __tablename__ = "approval_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account: Mapped[str] = mapped_column(String(64), nullable=False)
+    mode: Mapped[str] = mapped_column(String(8), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    decided_by: Mapped[str | None] = mapped_column(String(64))
+    decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected', 'expired', 'executed')", name="status"
+        ),
+        CheckConstraint(f"mode IN {_ACCOUNT_MODES}", name="mode"),
+        Index("ix_approval_status", "account", "status"),
+    )
+
+
+class ExecutionAuditRow(Base):
+    """Append-only record of every execution attempt, in every mode (dry-run included)."""
+
+    __tablename__ = "execution_audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    account: Mapped[str] = mapped_column(String(64), nullable=False)
+    mode: Mapped[str] = mapped_column(String(8), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    exchange_ref: Mapped[str | None] = mapped_column(String(64))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint("mode IN ('dry_run', 'paper', 'live')", name="mode"),
+        CheckConstraint("action IN ('place', 'cancel')", name="action"),
+        CheckConstraint(
+            "outcome IN ('simulated', 'submitted', 'duplicate', 'failed', 'refused')",
+            name="outcome",
+        ),
+        Index("ix_audit_account_at", "account", "at"),
+    )
+
+
+class IdempotencyKeyRow(Base):
+    __tablename__ = "execution_idempotency_keys"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    account: Mapped[str] = mapped_column(String(64), nullable=False)
+    mode: Mapped[str] = mapped_column(String(8), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    exchange_ref: Mapped[str | None] = mapped_column(String(64))
+
+
+class AlertRow(Base):
+    __tablename__ = "alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    code: Mapped[str] = mapped_column(String(64), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        CheckConstraint("severity IN ('info', 'warning', 'critical')", name="severity"),
+        Index("ix_alerts_at", "at"),
+    )
+
+
+class PaperAccountStateRow(Base):
+    """Serialised virtual account so paper trading survives restarts."""
+
+    __tablename__ = "paper_account_state"
+
+    account: Mapped[str] = mapped_column(String(64), primary_key=True)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+# ---------------------------------------------------------------------------
+# AI supervisory agent (Phase 6)
+# ---------------------------------------------------------------------------
+class AgentRecommendationRow(Base):
+    """Validated configuration proposals. Never applied automatically."""
+
+    __tablename__ = "agent_recommendations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)  # "llm:<model>" | "rules"
+    parameter: Mapped[str] = mapped_column(String(64), nullable=False)
+    proposed_value: Mapped[str] = mapped_column(String(64), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    risk_increasing: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="proposed")
+    decided_by: Mapped[str | None] = mapped_column(String(64))
+    decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('proposed', 'accepted', 'rejected')", name="status"),
+    )
+
+
+class AgentActivityRow(Base):
+    __tablename__ = "agent_activity"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)  # report | question | tool
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    detail: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (Index("ix_agent_activity_at", "at"),)
+
+
+class TradingCandleRow(Base):
+    """Trading-pair candles (e.g. BTC/USD) used for volatility indicators."""
+
+    __tablename__ = "trading_candles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exchange: Mapped[str] = mapped_column(String(32), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    timeframe: Mapped[str] = mapped_column(String(8), nullable=False)
+    open_time: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    open: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    close: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    high: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    low: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    volume: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    origin: Mapped[str] = _origin_column()
+
+    __table_args__ = (
+        UniqueConstraint("exchange", "symbol", "timeframe", "open_time"),
+        CheckConstraint(f"origin IN {ORIGIN_VALUES}", name="origin"),
     )

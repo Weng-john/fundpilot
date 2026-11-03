@@ -17,3 +17,5 @@ build/
 /data/
 experiments/**/outputs/
 node_modules/
+/models/
+apps/web/dist/

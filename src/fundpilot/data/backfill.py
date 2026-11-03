@@ -179,3 +179,27 @@ def backfill_candles(
         warnings=report.warnings,
     )
     return _run(sessions, report, pages, repository.save_candles, lambda r: r.open_time)
+
+
+def backfill_trading_candles(
+    adapter: object,
+    sessions: sessionmaker[Session],
+    pair: str,
+    start: datetime,
+    end: datetime,
+    *,
+    timeframe: str = "1h",
+    page_limit: int = 1000,
+) -> BackfillReport:
+    """Trading-pair candles (e.g. ``tBTCUSD``) for volatility indicators."""
+    fetch = adapter.get_trading_candles  # type: ignore[attr-defined]
+    report = BackfillReport(f"trading_candles:{timeframe}", pair)
+    pages = paginate_backward(
+        lambda s, e: fetch(pair, timeframe, start=from_ms(s), end=from_ms(e), limit=page_limit),
+        lambda row: to_ms(row.open_time),
+        to_ms(ensure_utc(start)),
+        to_ms(ensure_utc(end)),
+        page_limit,
+        warnings=report.warnings,
+    )
+    return _run(sessions, report, pages, repository.save_trading_candles, lambda r: r.open_time)

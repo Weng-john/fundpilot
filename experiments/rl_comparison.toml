@@ -1,0 +1,43 @@
+# Train RL policies on the first part of the window and compare them with baseline
+# strategies on the unseen remainder, under identical simulation assumptions.
+name = "rl_vs_baselines"
+symbol = "fUST"
+start = "2026-01-01T00:00:00+00:00"
+end = "2026-01-08T00:00:00+00:00"
+step_seconds = 300
+decision_every = 3          # decide every 15 minutes
+episode_decisions = 96      # 24 h episodes
+warmup_steps = 288          # 24 h of feature history before each episode
+train_fraction = 0.7
+scenarios = ["conservative", "neutral", "optimistic"]   # first one is used for training
+seed = 7
+ppo_timesteps = 20000       # 0 disables PPO (needs `uv sync --extra rl`)
+baseline = "frr_2d"
+
+[simulation]
+initial_capital = "10000"
+
+[reward]
+idle_penalty = 0.5
+lock_penalty_per_day = 0.0
+max_lock_days = 30
+concentration_penalty = 0.0
+action_cost = 0.0
+
+[cem]
+iterations = 15
+population = 24
+episodes_per_candidate = 2
+
+[[baselines]]
+id = "frr_2d"
+type = "frr"
+
+[[baselines]]
+id = "fixed_2d"
+type = "fixed_rate"
+rate = "0.0002"
+
+[[baselines]]
+id = "ladder"
+type = "adaptive_ladder"

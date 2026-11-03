@@ -1,0 +1,16 @@
+# Task 2: probability that an offer fills within the window.
+# label_source: "observed" (live offers; ground truth), "simulated" (paper), or
+# "inferred" (hypothetical offers from public trades; NOT ground truth).
+name = "fill_probability_1h"
+task = "fill_probability"
+symbol = "fUST"
+start = "2026-01-01T00:00:00+00:00"
+end = "2026-01-15T00:00:00+00:00"
+step_seconds = 300
+horizon_seconds = 3600
+sample_every_seconds = 1800
+n_splits = 4
+label_source = "inferred"
+allow_synthetic = false
+register = true
+models_dir = "models"

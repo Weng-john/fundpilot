@@ -138,11 +138,20 @@ class MarketDataCollector:
             run.error = result.error
         return result
 
+    def _trading_candles(
+        self, session: Session, pair: str
+    ) -> tuple[int, int, list[quality.QualityIssue]]:
+        candles = self._adapter.get_trading_candles(pair, "1h", limit=3)  # type: ignore[attr-defined]
+        return len(candles), repository.save_trading_candles(session, candles), []
+
     def collect_once(self) -> list[JobResult]:
         results = []
         for symbol in self._settings.symbols:
             for name, fn in self.jobs().items():
                 results.append(self.run_job(name, fn, symbol))
+        if hasattr(self._adapter, "get_trading_candles"):
+            for pair in self._settings.volatility_pairs:
+                results.append(self.run_job("trading_candles", self._trading_candles, pair))
         return results
 
     def run_forever(

@@ -26,6 +26,7 @@ from fundpilot.core.models import (
     FundingStat,
     FundingTicker,
     FundingTrade,
+    TradingCandle,
 )
 from fundpilot.core.time import from_ms
 from fundpilot.exchanges.errors import ResponseParseError
@@ -245,3 +246,33 @@ def parse_platform_status(payload: Any) -> bool:
     """``platform/status`` returns ``[1]`` when operative, ``[0]`` in maintenance."""
     row = _row(payload, 1, "platform status")
     return _int(row[0], "status") == 1
+
+
+TRADING_TICKER_LEN = 10
+
+
+def parse_trading_last_price(payload: Any) -> Decimal:
+    """Trading ticker ``ticker/t{PAIR}``: 10 fields, ``LAST_PRICE`` at index 6 (per SDK)."""
+    row = _row(payload, TRADING_TICKER_LEN, "trading ticker")
+    return _dec(row[6], "last_price")
+
+
+def parse_trading_candles(payload: Any, *, symbol: str, timeframe: str) -> list[TradingCandle]:
+    """Trading candles share the funding candle layout ``[MTS, OPEN, CLOSE, HIGH, LOW, VOL]``."""
+    out = []
+    for i, raw in enumerate(_rows(payload, "trading candles")):
+        row = _row(raw, CANDLE_LEN, f"trading candle row {i}")
+        out.append(
+            TradingCandle(
+                exchange=EXCHANGE,
+                symbol=symbol,
+                timeframe=timeframe,
+                open_time=_ts(row[0], "mts"),
+                open=_dec(row[1], "open"),
+                close=_dec(row[2], "close"),
+                high=_dec(row[3], "high"),
+                low=_dec(row[4], "low"),
+                volume=_dec(row[5], "volume"),
+            )
+        )
+    return out

@@ -18,6 +18,15 @@ src/fundpilot/
 │   ├── ratelimit.py     # token bucket
 │   ├── errors.py
 │   └── bitfinex/        # ALL Bitfinex-specific code: client, parsers, symbols, adapter
+├── strategies/          # Strategy protocol, constraints, 5 baselines (no exchange access)
+├── backtesting/         # point-in-time feed, simulator, scenarios, metrics, experiments, synthetic data
+├── risk/                # RiskManager, limits, health blockers
+├── execution/           # ExecutionGateway (dry_run/paper; live refused), controls, approvals
+├── ml/                  # features, datasets (label provenance), models, walk-forward, registry
+├── api/                 # FastAPI dashboard API (read-only + token-protected emergency stop)
+├── agents/              # analytics, reports, OpenAI-compatible client, read-only tools, recommendations
+├── rl/                  # Gymnasium env, CEM/PPO policies, PolicyStrategy, evaluation
+├── paper/               # live market source, health monitor, paper trading engine
 └── data/
     ├── types.py         # ExactDecimal / UTCDateTime portable column types
     ├── models.py        # SQLAlchemy schema
@@ -30,8 +39,9 @@ src/fundpilot/
 migrations/              # Alembic revisions
 ```
 
-Planned (not yet present): `strategies/`, `backtesting/`, `optimization/`, `ml/`, `rl/`,
-`agents/`, `risk/`, `execution/`, `apps/api`, `apps/web`.
+The dashboard UI lives in `apps/web` (React + TypeScript + Vite); its API is `fundpilot.api`.
+
+Planned (not yet present): `optimization/`.
 
 ## Data flow (Phase 1)
 

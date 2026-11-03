@@ -14,16 +14,27 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from fundpilot.backtesting.experiment import ExperimentConfig, run_experiment, write_report
+from fundpilot.backtesting.feed import FeedConfig, MarketFeed, load_feed
+from fundpilot.backtesting.synthetic import SyntheticConfig, generate
 from fundpilot.config import Settings, get_settings
+from fundpilot.core.models import DataOrigin
 from fundpilot.core.time import utc_now
 from fundpilot.data import backfill, quality, repository, retention
 from fundpilot.data.db import create_db_engine, make_session_factory, session_scope
 from fundpilot.data.ingestion import MarketDataCollector
 from fundpilot.data.migrate import upgrade
+from fundpilot.data.models import PaperAccountStateRow
 from fundpilot.exchanges.bitfinex import BitfinexPublicAdapter
+from fundpilot.execution.controls import Controls
+from fundpilot.paper.engine import PaperConfig, PaperTradingEngine
+from fundpilot.paper.source import HealthMonitor, LiveMarketSource, VolatilityProvider
 
 
 def _parse_dt(value: str) -> datetime:
@@ -88,7 +99,11 @@ def cmd_backfill(settings: Settings, args: argparse.Namespace) -> int:
     start, end = _parse_dt(args.start), _parse_dt(args.end) if args.end else utc_now()
     try:
         with _sessions(settings) as sessions:
-            if args.dataset == "stats":
+            if args.dataset == "volatility":
+                report = backfill.backfill_trading_candles(
+                    adapter, sessions, args.symbol, start, end
+                )
+            elif args.dataset == "stats":
                 report = backfill.backfill_funding_stats(adapter, sessions, args.symbol, start, end)
             elif args.dataset == "trades":
                 report = backfill.backfill_trades(adapter, sessions, args.symbol, start, end)
@@ -164,6 +179,351 @@ def cmd_status(settings: Settings, _: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_demo_data(settings: Settings, args: argparse.Namespace) -> int:
+    cfg = SyntheticConfig(
+        symbol=args.symbol, start=_parse_dt(args.start), days=args.days, seed=args.seed
+    )
+    tickers, books, trades = generate(cfg)
+    with _sessions(settings) as sessions, session_scope(sessions) as session:
+        inserted = repository.save_tickers(session, tickers) + repository.save_trades(
+            session, trades
+        )
+        for book in books:
+            repository.save_book_snapshot(session, book)
+    _print(
+        {
+            "origin": "synthetic",
+            "tickers": len(tickers),
+            "books": len(books),
+            "trades": len(trades),
+            "rows_inserted_excluding_books": inserted,
+            "warning": "SYNTHETIC DATA - excluded from backtests unless allow_synthetic",
+        }
+    )
+    return 0
+
+
+def cmd_backtest(settings: Settings, args: argparse.Namespace) -> int:
+    config = ExperimentConfig.from_toml(Path(args.config))
+    origins = [DataOrigin.EXCHANGE_API]
+    if config.allow_synthetic or args.allow_synthetic or args.synthetic_demo:
+        origins.append(DataOrigin.SYNTHETIC)
+    feed_cfg = FeedConfig(
+        exchange=config.exchange,
+        symbol=config.symbol,
+        start=config.start,
+        end=config.end,
+        step=config.step,
+        origins=tuple(origins),
+    )
+    if args.synthetic_demo:
+        days = max(1, int((config.end - config.start).total_seconds() // 86_400))
+        tickers, books, trades = generate(
+            SyntheticConfig(
+                symbol=config.symbol, start=config.start, days=days, seed=config.simulation.seed
+            )
+        )
+        feed = MarketFeed(
+            FeedConfig(
+                exchange=config.exchange,
+                symbol=config.symbol,
+                start=config.start,
+                end=config.end,
+                step=config.step,
+                origins=(DataOrigin.SYNTHETIC,),
+            ),
+            tickers,
+            books,
+            trades,
+        )
+    else:
+        with _sessions(settings) as sessions, session_scope(sessions) as session:
+            feed = load_feed(session, feed_cfg)
+    report = run_experiment(config, feed, feed.provenance, now=utc_now())
+    out = (
+        Path(args.output)
+        if args.output
+        else (Path("experiments/outputs") / config.name / utc_now().strftime("%Y%m%dT%H%M%SZ"))
+    )
+    json_path, md_path = write_report(report, out)
+    print(report.to_markdown())
+    print(f"wrote {json_path} and {md_path}", file=sys.stderr)
+    return 0
+
+
+def cmd_paper_run(settings: Settings, args: argparse.Namespace) -> int:
+    config = PaperConfig.from_toml(Path(args.config))
+    adapter = BitfinexPublicAdapter.from_settings(settings)
+    try:
+        with _sessions(settings) as sessions:
+            controls = Controls(sessions)
+            vol = VolatilityProvider(lambda pair: adapter.get_trading_candles(pair, "1h", limit=48))
+            source = LiveMarketSource(adapter, config.symbol, indicators=vol)
+            pair = config.stablecoin_pair
+            monitor = HealthMonitor(
+                controls,
+                source,
+                platform_check=adapter.is_operational,
+                stablecoin_price=(lambda: adapter.get_last_price(pair)) if pair else None,
+            )
+            engine = PaperTradingEngine(config, source, monitor, sessions, controls=controls)
+            print(
+                f"paper trading account {config.account!r} (SIMULATED fills on live data)",
+                file=sys.stderr,
+            )
+            engine.run(iterations=args.iterations)
+    finally:
+        adapter.close()
+    return 0
+
+
+def cmd_paper_status(settings: Settings, args: argparse.Namespace) -> int:
+    with _sessions(settings) as sessions, session_scope(sessions) as session:
+        row = session.get(PaperAccountStateRow, args.account)
+        if row is None:
+            print(f"no paper account {args.account!r}", file=sys.stderr)
+            return 1
+        state = row.state
+        _print(
+            {
+                "account": args.account,
+                "mode": "paper (SIMULATED)",
+                "updated_at": row.updated_at,
+                "available": state["available"],
+                "pending_interest": state["pending"],
+                "gross_interest": state["gross"],
+                "fees": state["fees"],
+                "paid": state["paid"],
+                "open_offers": len(state["offers"]),
+                "active_credits": len(state["credits"]),
+                "lent": str(sum((Decimal(c["amount"]) for c in state["credits"]), Decimal(0))),
+            }
+        )
+    return 0
+
+
+def cmd_emergency_stop(settings: Settings, args: argparse.Namespace) -> int:
+    with _sessions(settings) as sessions:
+        print(Controls(sessions).emergency_stop(args.reason, by=args.by))
+    return 0
+
+
+def cmd_resume(settings: Settings, args: argparse.Namespace) -> int:
+    if not args.confirm:
+        print("refusing to resume without --confirm", file=sys.stderr)
+        return 2
+    with _sessions(settings) as sessions:
+        Controls(sessions).resume(by=args.by)
+    print("emergency stop cleared; new offers may be placed again after risk checks")
+    return 0
+
+
+def cmd_approvals(settings: Settings, args: argparse.Namespace) -> int:
+    with _sessions(settings) as sessions:
+        controls = Controls(sessions)
+        if args.action == "list":
+            _print(
+                [
+                    {
+                        "id": r.id,
+                        "account": r.account,
+                        "mode": r.mode,
+                        "payload": r.payload,
+                        "reason": r.reason,
+                        "expires_at": r.expires_at,
+                    }
+                    for r in controls.pending_approvals()
+                ]
+            )
+            return 0
+        if args.id is None:
+            print("an approval id is required", file=sys.stderr)
+            return 2
+        status = controls.decide_approval(args.id, args.action == "approve", by=args.by)
+        print(f"approval {args.id}: {status}")
+    return 0
+
+
+def cmd_alerts(settings: Settings, args: argparse.Namespace) -> int:
+    with _sessions(settings) as sessions:
+        _print(
+            [
+                {
+                    "at": a.at,
+                    "source": a.source,
+                    "code": a.code,
+                    "severity": a.severity,
+                    "message": a.message,
+                }
+                for a in Controls(sessions).recent_alerts(args.limit)
+            ]
+        )
+    return 0
+
+
+def cmd_ml(settings: Settings, args: argparse.Namespace) -> int:
+    from fundpilot.ml import pipeline  # noqa: PLC0415 - optional `ml` extra
+
+    cfg = pipeline.MLConfig.from_toml(Path(args.config))
+    output = Path(args.output) if args.output else None
+    if args.synthetic_demo:
+        report, model_dir, path = pipeline.run(cfg, None, synthetic_demo=True, output=output)
+    else:
+        with _sessions(settings) as sessions, session_scope(sessions) as session:
+            report, model_dir, path = pipeline.run(cfg, session, output=output)
+    _print(report.to_dict())
+    print(f"report: {path}; model: {model_dir}", file=sys.stderr)
+    return 0
+
+
+def cmd_rl(settings: Settings, args: argparse.Namespace) -> int:
+    from fundpilot.rl import evaluate as rl_eval  # noqa: PLC0415 - optional `rl` extra
+
+    cfg = rl_eval.RLConfig.from_toml(Path(args.config))
+    origins: tuple[DataOrigin, ...] = (DataOrigin.EXCHANGE_API,)
+    if args.synthetic_demo:
+        days = max(1, int((cfg.end - cfg.start).total_seconds() // 86_400))
+        t, b, tr = generate(
+            SyntheticConfig(
+                symbol=cfg.symbol, start=cfg.start, days=days, step=cfg.step, seed=cfg.seed
+            )
+        )
+        feed = MarketFeed(
+            FeedConfig(
+                exchange="bitfinex",
+                symbol=cfg.symbol,
+                start=cfg.start,
+                end=cfg.end - cfg.step,
+                step=cfg.step,
+                origins=(DataOrigin.SYNTHETIC,),
+            ),
+            t,
+            b,
+            tr,
+        )
+    else:
+        with _sessions(settings) as sessions, session_scope(sessions) as session:
+            feed = load_feed(
+                session,
+                FeedConfig(
+                    exchange="bitfinex",
+                    symbol=cfg.symbol,
+                    start=cfg.start,
+                    end=cfg.end,
+                    step=cfg.step,
+                    origins=origins,
+                ),
+            )
+    out = (
+        Path(args.output)
+        if args.output
+        else (Path("experiments/outputs/rl") / cfg.name / utc_now().strftime("%Y%m%dT%H%M%SZ"))
+    )
+    report = rl_eval.run(cfg, feed, synthetic=args.synthetic_demo, output=out)
+    _print(
+        {
+            k: report[k]
+            for k in ("warning", "train_window", "test_window", "test_env_rewards", "notes")
+        }
+    )
+    for run in report["backtests"]:
+        m = run["metrics"]
+        print(
+            f"{run['scenario']:>12} {run['strategy']:>28} net_yield="
+            f"{float(m['net_annualized_yield']) * 100:.3f}% excess="
+            f"{run['excess_vs_baseline']}"
+        )
+    print(f"report: {out / 'report.json'}", file=sys.stderr)
+    return 0
+
+
+def _agent(settings: Settings, sessions: sessionmaker[Session], symbol: str) -> Any:
+    from fundpilot.agents.llm import OpenAICompatibleClient  # noqa: PLC0415
+    from fundpilot.agents.supervisor import SupervisorAgent  # noqa: PLC0415
+
+    llm = None
+    if settings.llm_base_url and settings.llm_model:
+        key = settings.llm_api_key.get_secret_value() if settings.llm_api_key else None
+        llm = OpenAICompatibleClient(settings.llm_base_url, settings.llm_model, key)
+    return SupervisorAgent(sessions, symbol=symbol, llm=llm)
+
+
+def cmd_agent(settings: Settings, args: argparse.Namespace) -> int:
+    from fundpilot.agents.recommendations import RecommendationStore  # noqa: PLC0415
+
+    with _sessions(settings) as sessions:
+        if args.agent_command == "report":
+            text = _agent(settings, sessions, args.symbol).report(
+                args.period, account=args.account, use_llm=args.llm
+            )
+            if args.output:
+                Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+                Path(args.output).write_text(text)
+            print(text)
+        elif args.agent_command == "ask":
+            result = _agent(settings, sessions, args.symbol).ask(args.question)
+            print(result["answer"])
+            print(f"(tool calls: {[c['name'] for c in result['tool_calls']]})", file=sys.stderr)
+        elif args.agent_command == "recommendations":
+            store = RecommendationStore(sessions)
+            if args.action == "list":
+                _print(
+                    [
+                        {
+                            "id": r.id,
+                            "parameter": r.parameter,
+                            "value": r.proposed_value,
+                            "risk_increasing": r.risk_increasing,
+                            "source": r.source,
+                            "rationale": r.rationale,
+                            "status": r.status,
+                        }
+                        for r in store.list(None if args.all else "proposed")
+                    ]
+                )
+            else:
+                if args.id is None:
+                    print("a recommendation id is required", file=sys.stderr)
+                    return 2
+                status = store.decide(args.id, args.action == "accept", by=args.by)
+                print(f"recommendation {args.id}: {status} (edit your config to apply it)")
+    return 0
+
+
+def cmd_serve(settings: Settings, args: argparse.Namespace) -> int:
+    import uvicorn  # noqa: PLC0415 - optional `api` extra
+
+    from fundpilot.api.app import create_app  # noqa: PLC0415
+
+    uvicorn.run(create_app(settings), host=args.host, port=args.port, log_level="info")
+    return 0
+
+
+def cmd_stream(settings: Settings, args: argparse.Namespace) -> int:
+    import asyncio  # noqa: PLC0415
+
+    from fundpilot.data.streaming import record  # noqa: PLC0415
+    from fundpilot.exchanges.bitfinex.ws import (  # noqa: PLC0415
+        BitfinexFundingStream,
+        FundingStreamState,
+    )
+
+    stream = BitfinexFundingStream(FundingStreamState(args.symbol), book_length=args.book_length)
+    with _sessions(settings) as sessions:
+        try:
+            asyncio.run(
+                record(
+                    stream,
+                    sessions,
+                    flush_every=args.flush_every,
+                    on_flush=lambda c: print(json.dumps(c), file=sys.stderr),
+                )
+            )
+        except KeyboardInterrupt:
+            print("stopped", file=sys.stderr)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fundpilot", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -179,7 +539,11 @@ def build_parser() -> argparse.ArgumentParser:
     collect.set_defaults(func=cmd_collect)
 
     bf = sub.add_parser("backfill", help="historical backfill")
-    bf.add_argument("dataset", choices=["stats", "trades", "candles"])
+    bf.add_argument(
+        "dataset",
+        choices=["stats", "trades", "candles", "volatility"],
+        help="volatility = 1h trading candles of --symbol (e.g. tBTCUSD)",
+    )
     bf.add_argument("--symbol", default="fUST")
     bf.add_argument("--start", required=True, help="ISO-8601, UTC if no offset")
     bf.add_argument("--end", default=None)
@@ -195,6 +559,108 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--older-than-days", type=int, required=True)
     pr.add_argument("--confirm", action="store_true", help="actually delete rows")
     pr.set_defaults(func=cmd_prune)
+
+    demo = sub.add_parser("demo-data", help="write SYNTHETIC demo data (origin=synthetic)")
+    demo.add_argument("--symbol", default="fUST")
+    demo.add_argument("--start", default="2026-01-01T00:00:00+00:00")
+    demo.add_argument("--days", type=int, default=3)
+    demo.add_argument("--seed", type=int, default=42)
+    demo.set_defaults(func=cmd_demo_data)
+
+    bt = sub.add_parser("backtest", help="run a backtest experiment (SIMULATED results)")
+    bt.add_argument("config", help="experiment TOML file")
+    bt.add_argument("--output", default=None, help="output directory")
+    bt.add_argument(
+        "--allow-synthetic",
+        action="store_true",
+        help="include origin=synthetic rows from the database",
+    )
+    bt.add_argument(
+        "--synthetic-demo",
+        action="store_true",
+        help="generate synthetic data in memory instead of reading the database",
+    )
+    bt.set_defaults(func=cmd_backtest)
+
+    paper = sub.add_parser("paper", help="paper trading (simulated fills on live public data)")
+    paper_sub = paper.add_subparsers(dest="paper_command", required=True)
+    pr_run = paper_sub.add_parser("run", help="run the paper trading loop")
+    pr_run.add_argument("config", help="paper trading TOML file")
+    pr_run.add_argument("--iterations", type=int, default=None)
+    pr_run.set_defaults(func=cmd_paper_run)
+    pr_status = paper_sub.add_parser("status", help="show a paper account")
+    pr_status.add_argument("--account", required=True)
+    pr_status.set_defaults(func=cmd_paper_status)
+
+    stop = sub.add_parser("emergency-stop", help="suspend all new offers")
+    stop.add_argument("--reason", required=True)
+    stop.add_argument("--by", default="operator")
+    stop.set_defaults(func=cmd_emergency_stop)
+    resume = sub.add_parser("resume", help="clear the emergency stop")
+    resume.add_argument("--confirm", action="store_true")
+    resume.add_argument("--by", default="operator")
+    resume.set_defaults(func=cmd_resume)
+
+    appr = sub.add_parser("approvals", help="manual approval queue")
+    appr.add_argument("action", choices=["list", "approve", "reject"])
+    appr.add_argument("id", nargs="?", type=int)
+    appr.add_argument("--by", default="operator")
+    appr.set_defaults(func=cmd_approvals)
+
+    al = sub.add_parser("alerts", help="recent alerts")
+    al.add_argument("--limit", type=int, default=50)
+    al.set_defaults(func=cmd_alerts)
+
+    ml = sub.add_parser("ml", help="train and evaluate ML models (walk-forward, out-of-sample)")
+    ml.add_argument("config", help="ML TOML file (task = rate_forecast | fill_probability)")
+    ml.add_argument("--output", default=None)
+    ml.add_argument(
+        "--synthetic-demo",
+        action="store_true",
+        help="use generated SYNTHETIC data (pipeline demo only)",
+    )
+    ml.set_defaults(func=cmd_ml)
+
+    rl = sub.add_parser("rl", help="train RL policies and compare with baselines out-of-sample")
+    rl.add_argument("config", help="RL TOML file")
+    rl.add_argument("--output", default=None)
+    rl.add_argument(
+        "--synthetic-demo",
+        action="store_true",
+        help="use generated SYNTHETIC data (pipeline demo only)",
+    )
+    rl.set_defaults(func=cmd_rl)
+
+    agent = sub.add_parser("agent", help="supervisory agent (read-only; optional LLM)")
+    agent_sub = agent.add_subparsers(dest="agent_command", required=True)
+    rep = agent_sub.add_parser("report", help="daily/weekly report (deterministic by default)")
+    rep.add_argument("--period", choices=["daily", "weekly"], default="daily")
+    rep.add_argument("--symbol", default="fUST")
+    rep.add_argument("--account", default=None, help="paper account to review")
+    rep.add_argument("--llm", action="store_true", help="append AI commentary (needs LLM)")
+    rep.add_argument("--output", default=None)
+    rep.set_defaults(func=cmd_agent)
+    ask = agent_sub.add_parser("ask", help="ask a question (needs LLM; read-only tools)")
+    ask.add_argument("question")
+    ask.add_argument("--symbol", default="fUST")
+    ask.set_defaults(func=cmd_agent)
+    recs = agent_sub.add_parser("recommendations", help="review agent recommendations")
+    recs.add_argument("action", choices=["list", "accept", "reject"])
+    recs.add_argument("id", nargs="?", type=int)
+    recs.add_argument("--all", action="store_true")
+    recs.add_argument("--by", default="operator")
+    recs.set_defaults(func=cmd_agent)
+
+    serve = sub.add_parser("serve", help="run the dashboard API (read-only + emergency stop)")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.set_defaults(func=cmd_serve)
+
+    st = sub.add_parser("stream", help="record the public WebSocket stream (with reconnection)")
+    st.add_argument("--symbol", default="fUST")
+    st.add_argument("--book-length", type=int, default=100, choices=[1, 25, 100, 250])
+    st.add_argument("--flush-every", type=float, default=60.0, help="seconds between writes")
+    st.set_defaults(func=cmd_stream)
 
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser

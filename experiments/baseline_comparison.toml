@@ -1,0 +1,49 @@
+# Baseline comparison experiment.
+# Results are SIMULATED under assumed execution scenarios (see docs/backtesting.md).
+# By default only genuine exchange observations (origin=exchange_api) are used.
+name = "baseline_comparison"
+exchange = "bitfinex"
+symbol = "fUST"
+start = "2026-01-01T00:00:00+00:00"
+end = "2026-01-04T00:00:00+00:00"
+step_seconds = 60
+scenarios = ["conservative", "neutral", "optimistic"]
+baseline = "frr_2d"
+seed = 7
+allow_synthetic = false
+
+[simulation]
+initial_capital = "10000"
+currency = "UST"
+decision_interval_seconds = 300
+operating_cost_per_day = "0"
+
+[[strategies]]
+id = "fixed_2d"
+type = "fixed_rate"
+rate = "0.0002"
+period_days = 2
+
+[[strategies]]
+id = "frr_2d"
+type = "frr"
+period_days = 2
+
+[[strategies]]
+id = "auto_renew_frr"
+type = "auto_renew"
+period_days = 2
+
+[[strategies]]
+id = "ladder"
+type = "adaptive_ladder"
+tilt = "0.8"
+rate_quantile = "0.5"
+reprice_after_minutes = 60
+
+[[strategies]]
+id = "book_aware_2d"
+type = "orderbook_aware"
+period_days = 2
+depth_ahead = "500000"
+reprice_after_minutes = 30

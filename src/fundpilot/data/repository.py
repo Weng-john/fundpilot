@@ -16,6 +16,7 @@ from fundpilot.core.models import (
     FundingStat,
     FundingTicker,
     FundingTrade,
+    TradingCandle,
 )
 from fundpilot.data.models import (
     Base,
@@ -25,6 +26,7 @@ from fundpilot.data.models import (
     FundingStatRow,
     FundingTickerRow,
     FundingTradeRow,
+    TradingCandleRow,
 )
 
 _CHUNK = 500
@@ -65,6 +67,10 @@ def save_trades(session: Session, trades: Iterable[FundingTrade]) -> int:
 
 def save_candles(session: Session, candles: Iterable[FundingCandle]) -> int:
     return insert_ignore(session, FundingCandleRow, [c.model_dump() for c in candles])
+
+
+def save_trading_candles(session: Session, candles: Iterable[TradingCandle]) -> int:
+    return insert_ignore(session, TradingCandleRow, [c.model_dump() for c in candles])
 
 
 def save_book_snapshot(session: Session, snapshot: FundingBookSnapshot) -> int:

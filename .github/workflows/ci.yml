@@ -44,6 +44,22 @@ jobs:
       - name: Tests (unit + PostgreSQL integration)
         run: uv run pytest --cov=fundpilot --cov-report=term-missing
 
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - name: Type check and build
+        run: npm run build
+
   docker-build:
     runs-on: ubuntu-latest
     steps:

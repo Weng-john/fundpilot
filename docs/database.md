@@ -23,6 +23,7 @@ PostgreSQL is the target; SQLite is supported for tests and zero-setup local run
 | `funding_stats` | exchange, symbol, observed_at | `frr_raw` as reported, `frr` normalised |
 | `funding_candles` | exchange, candle_key, open_time | OHLC of rates |
 | `funding_trades` | exchange, symbol, trade_id | signed `amount` as reported |
+| `trading_candles` | exchange, symbol, timeframe, open_time | BTC/ETH 1h candles for volatility (migration `0004`) |
 
 All have `origin` with CHECK ∈ (`exchange_api`, `reconstructed`, `synthetic`).
 
@@ -38,6 +39,24 @@ All have `origin` with CHECK ∈ (`exchange_api`, `reconstructed`, `synthetic`).
 `funding_wallet_snapshots`, `funding_offer_events`, `funding_credit_events`,
 `funding_interest_payments` — each keyed by `account` + `mode` (`paper`/`live`) so paper
 results can never be confused with live results.
+
+## Operations (Phase 3, migration `0002`)
+
+| Table | Purpose |
+|---|---|
+| `control_flags` | persistent switches (`emergency_stop`) with reason, who and when |
+| `approval_requests` | manual approval queue: pending / approved / rejected / expired / executed |
+| `execution_audit_log` | append-only record of every execution attempt in every mode |
+| `execution_idempotency_keys` | duplicate-order prevention |
+| `alerts` | risk / operational alerts (deduplicated per code within 30 min) |
+| `paper_account_state` | serialised virtual account so paper trading resumes after restarts |
+
+## Agent (Phase 6, migration `0003`)
+
+| Table | Purpose |
+|---|---|
+| `agent_recommendations` | validated proposals (`proposed` / `accepted` / `rejected`), never auto-applied |
+| `agent_activity` | log of reports and questions with tool calls |
 
 ## Retention
 

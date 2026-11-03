@@ -1,7 +1,7 @@
 """Application settings loaded from environment variables (prefix ``FUNDPILOT_``).
 
-No credential fields exist in Phase 1: the public market-data pipeline does not
-need them. Live execution is not implemented and cannot be switched on here.
+There are no exchange credential fields: market data is public and live execution is not
+implemented. The only secret is an optional LLM provider key for the supervisory agent.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,12 +56,27 @@ class Settings(BaseSettings):
     raw_book_length: int = 100
     trades_limit: int = 1000
     collect_interval_seconds: int = Field(default=60, ge=10)
+    # trading pairs whose 1h candles feed BTC/ETH volatility indicators (codes per SDK usage)
+    volatility_pairs: list[str] = Field(default_factory=lambda: ["tBTCUSD", "tETHUSD"])
 
     # -- data quality --------------------------------------------------
     max_plausible_daily_rate: Decimal = Decimal("0.07")
     min_funding_period_days: int = 2
     max_funding_period_days: int = 120
     staleness_threshold_seconds: int = 300
+
+    # -- optional OpenAI-compatible LLM for the supervisory agent -------
+    # Leave unset to run fully deterministic (no LLM). This key is for the LLM provider only;
+    # FundPilot has no exchange credential settings.
+    llm_base_url: str | None = None
+    llm_model: str | None = None
+    llm_api_key: SecretStr | None = None
+
+    # -- dashboard API --------------------------------------------------
+    # Write endpoints (only "emergency stop") are disabled unless a token is set.
+    api_token: SecretStr | None = None
+    api_reports_root: str = "experiments/outputs"
+    api_models_root: str = "models"
 
     # -- retention (days; 0 = keep forever) -----------------------------
     retention_book_snapshots_days: int = 90
