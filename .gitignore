@@ -17,3 +17,4 @@ build/
 /data/
 experiments/**/outputs/
 node_modules/
+/models/
