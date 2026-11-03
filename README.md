@@ -11,6 +11,8 @@ The central research question:
 
 FundPilot does **not** assume the answer is yes.
 
+> **Picking up this project?** Read [HANDOFF.md](HANDOFF.md) first.
+
 ## Status
 
 | Phase | Scope | State |

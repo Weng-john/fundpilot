@@ -1,0 +1,74 @@
+# Handoff — current status and next steps
+
+Last updated: 2026-11-03 (UTC). Keep this file current: any agent picking up the work starts here.
+
+## Where things stand
+
+- `main` contains Phases 1–6 plus the dashboard. These were merged in PR Weng-john/fundpilot#3.
+- Branch `claude/friendly-cerf-nsdxqv` holds follow-up work on top of `main`. No PR is open for it yet. Its commits:
+  1. `ea94b30` fix(exchanges): per-endpoint rate limits from the docs, plus detection of the `{"error":"ERR_RATE_LIMIT"}` body.
+  2. Same commit, WebSocket: re-subscribe after maintenance code 20061, handle the platform status flag, wait at least 3 s before reconnecting.
+  3. `3a3d609` fix: only funding *taken* (trade amount < 0) fills resting offers, except in the optimistic scenario.
+  4. Same commit: the order-book-aware strategy only compares bids/asks with matching periods.
+  5. `fca8418` feat: `reconstruct-tickers`, book-less backtests (`require_book = false`), backfill page size 10000, `experiments/real_baselines_30d.toml`, and the verification table in `docs/bitfinex-integration.md`.
+- Local checks on that branch pass: ruff, format, mypy strict, 231 tests (+6 PostgreSQL tests, skipped without a DB URL). CI has not run on it yet.
+
+## Verified facts (2026-11-03)
+
+Sources: docs.bitfinex.com fetched as `.md` with `curl`, plus live API calls. Full table: `docs/bitfinex-integration.md`.
+
+- **A1–A8, A10, A11, A16 and the WebSocket items are verified.** A1: `fUST` is Tether USDt. A2/A3: rates are daily fractions, and funding stats FRR × 365 = daily rate.
+- **A12–A15 have no verified source yet:** 2–120 days, minimum offer 150, 15 % fee, per-second interest. `support.bitfinex.com` is not on the network allow-list.
+
+## Environment notes (cloud session)
+
+- Allowed hosts: `api-pub.bitfinex.com` and `docs.bitfinex.com`.
+  - Use `curl` for both. The WebFetch tool cannot resolve docs.bitfinex.com.
+  - Append `.md` to doc URLs to get Markdown.
+- PostgreSQL 16 runs locally. If it is down: `service postgresql start`.
+  - Dev DB: `postgresql+psycopg://fundpilot:fundpilot@localhost:5432/fundpilot_dev`, migrated to head.
+  - Test DB: `.../fundpilot_test`.
+  - **The local DB lives only in this container.** It is lost when the container is reclaimed; re-run the backfill to rebuild it.
+- Run integration tests with:
+  `FUNDPILOT_TEST_DATABASE_URL=postgresql+psycopg://fundpilot:fundpilot@localhost:5432/fundpilot_test uv run pytest`
+- `uv sync --all-extras` installs ML/RL/API extras. The rl extra pulls PyTorch, several GB.
+- Never use `pkill -f <pattern>` / `pgrep -f`. It matches the shell running it and kills the command. Use `ps -eo pid,args | grep "[p]attern"` instead.
+
+## Real data collected so far (in `fundpilot_dev` only, not committed)
+
+- `collect --once` succeeded for every job: ticker, P0/R0 book, stats, trades, BTC/ETH candles.
+- Backfill from 2026-10-04 onward:
+  - funding stats: 719 rows (hourly)
+  - fUST 1h candles `a30:p2:p30`: 729 rows
+  - tBTCUSD / tETHUSD 1h candles: 726 rows each
+- `fUST` trades: ~209k rows reaching back to 2026-10-23 when this was written; the backfill was still running.
+  - Roughly 20k trades/day; 93 % are funding taken.
+  - About 90 % are 2-day loans, at roughly 6 % APR.
+  - The FRR at the time was ~9.2 % APR, above most traded rates.
+
+## Next steps (in order)
+
+1. **Rebuild data if the container was reset.**
+   ```bash
+   export FUNDPILOT_DATABASE_URL=postgresql+psycopg://fundpilot:fundpilot@localhost:5432/fundpilot_dev
+   uv run fundpilot db upgrade
+   for a in "stats --symbol fUST" "candles --symbol fUST --timeframe 1h" "volatility --symbol tBTCUSD" "volatility --symbol tETHUSD" "trades --symbol fUST"; do uv run fundpilot backfill $a --start 2026-10-04T00:00:00+00:00; done
+   ```
+2. **Reconstruct FRR tickers.**
+   `uv run fundpilot reconstruct-tickers --symbol fUST --start 2026-10-04T00:00:00+00:00`
+3. **Run the first real-data backtest.**
+   `uv run fundpilot backtest experiments/real_baselines_30d.toml --output experiments/outputs/real_baselines_30d`
+   - Check memory and runtime: 30 days × 5-minute steps, `trade_lookback_seconds = 3600`.
+   - Results are SIMULATED. Label them RECONSTRUCTED: no historical order book, so no queue information.
+   - Report per scenario. Conclusions must hold under the conservative scenario.
+4. **Open a PR** for this branch into `main`; the user approves merges. Then run ML (`experiments/ml_*.toml`) and RL (`experiments/rl_comparison.toml`) on the real window with `allow_synthetic = false`. Those configs need `allow_reconstructed`/`require_book` support (only backtest has it today; ml/rl pipelines use `FeedConfig` defaults). Adding it is a small change in `ml/pipeline.py` and `cli.cmd_rl`.
+5. **Long-running collection** (needs a persistent host, not this container): `fundpilot collect` + `fundpilot stream` (or `docker compose up`). This accumulates real order books and tickers for book-aware backtests and paper trading.
+6. **Optional:** allow `support.bitfinex.com` to verify A12–A15; optional `optimization/` module (SciPy).
+
+## Decisions and constraints from the user
+
+- Phase 7 (live trading) is **not** to be started. The user has no Bitfinex API key yet, and live execution requires explicit approval.
+- Merges into `main` need the user's OK. PR #3 was approved and merged.
+- Reply to the user in Traditional Chinese.
+- Separate verified facts from inference; cite sources for time-sensitive claims.
+- Never present simulated results as real returns.
