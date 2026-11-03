@@ -1,0 +1,19 @@
+name: Bug report
+description: Something is broken
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened?, description: "Do NOT paste API keys or account data." }
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes: { label: Steps to reproduce }
+  - type: input
+    id: version
+    attributes: { label: FundPilot version / commit }
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Execution mode
+      options: [dry_run, paper, live]

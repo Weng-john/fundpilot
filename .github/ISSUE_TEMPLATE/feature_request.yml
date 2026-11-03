@@ -1,0 +1,16 @@
+name: Feature request
+description: Propose an enhancement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: Problem / motivation }
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes: { label: Proposed solution }
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Roadmap phase
+      options: ["1 Foundation", "2 Baselines", "3 Paper trading", "4 ML", "5 RL", "6 Agent", "7 Live"]

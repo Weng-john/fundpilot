@@ -1,0 +1,15 @@
+name: Exchange API verification
+description: Confirm or correct an assumption about exchange API behaviour
+labels: ["exchange-api", "verification"]
+body:
+  - type: input
+    id: assumption
+    attributes: { label: Assumption (see docs/bitfinex-integration.md) }
+    validations: { required: true }
+  - type: input
+    id: source
+    attributes: { label: Official source URL }
+    validations: { required: true }
+  - type: textarea
+    id: evidence
+    attributes: { label: Evidence (redact any account data) }

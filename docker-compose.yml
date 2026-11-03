@@ -1,0 +1,39 @@
+# Local stack: PostgreSQL + public market-data collector.
+# No exchange credentials are used or accepted by any service here.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fundpilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fundpilot}
+      POSTGRES_DB: fundpilot
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fundpilot"]
+      interval: 5s
+      retries: 10
+
+  migrate:
+    build: { context: ., dockerfile: docker/Dockerfile }
+    environment:
+      FUNDPILOT_DATABASE_URL: postgresql+psycopg://fundpilot:${POSTGRES_PASSWORD:-fundpilot}@db:5432/fundpilot
+    command: ["db", "upgrade"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  collector:
+    build: { context: ., dockerfile: docker/Dockerfile }
+    environment:
+      FUNDPILOT_DATABASE_URL: postgresql+psycopg://fundpilot:${POSTGRES_PASSWORD:-fundpilot}@db:5432/fundpilot
+      FUNDPILOT_SYMBOLS: '["fUST"]'
+      FUNDPILOT_EXECUTION_MODE: dry_run
+    command: ["collect"]
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  pgdata:

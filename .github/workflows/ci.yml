@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-type-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: fundpilot
+          POSTGRES_PASSWORD: fundpilot
+          POSTGRES_DB: fundpilot_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U fundpilot"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      FUNDPILOT_TEST_DATABASE_URL: postgresql+psycopg://fundpilot:fundpilot@localhost:5432/fundpilot_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - name: Install
+        run: uv sync --frozen
+      - name: Ruff lint
+        run: uv run ruff check src tests migrations
+      - name: Ruff format check
+        run: uv run ruff format --check src tests migrations
+      - name: Mypy (strict)
+        run: uv run mypy src tests
+      - name: Tests (unit + PostgreSQL integration)
+        run: uv run pytest --cov=fundpilot --cov-report=term-missing
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -f docker/Dockerfile -t fundpilot:ci .
