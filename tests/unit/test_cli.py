@@ -23,6 +23,7 @@ def test_defaults_are_safe() -> None:
     assert settings.execution_mode is ExecutionMode.DRY_RUN
     secrets = [n for n in Settings.model_fields if "key" in n or "secret" in n]
     assert secrets == ["llm_api_key"]  # LLM provider only; no exchange credentials
+    assert settings.api_token is None  # dashboard write endpoints disabled by default
     assert not any("bitfinex" in n and ("key" in n or "secret" in n) for n in Settings.model_fields)
     assert settings.llm_api_key is None
 
