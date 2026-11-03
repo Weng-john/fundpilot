@@ -14,7 +14,6 @@ from alembic import op
 
 import fundpilot.data.types
 
-
 revision: str = "0004"
 down_revision: str | None = "0003"
 branch_labels: str | Sequence[str] | None = None
