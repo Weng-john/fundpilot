@@ -494,6 +494,31 @@ def cmd_serve(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_stream(settings: Settings, args: argparse.Namespace) -> int:
+    import asyncio  # noqa: PLC0415
+
+    from fundpilot.data.streaming import record  # noqa: PLC0415
+    from fundpilot.exchanges.bitfinex.ws import (  # noqa: PLC0415
+        BitfinexFundingStream,
+        FundingStreamState,
+    )
+
+    stream = BitfinexFundingStream(FundingStreamState(args.symbol), book_length=args.book_length)
+    with _sessions(settings) as sessions:
+        try:
+            asyncio.run(
+                record(
+                    stream,
+                    sessions,
+                    flush_every=args.flush_every,
+                    on_flush=lambda c: print(json.dumps(c), file=sys.stderr),
+                )
+            )
+        except KeyboardInterrupt:
+            print("stopped", file=sys.stderr)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fundpilot", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -621,6 +646,12 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
     serve.set_defaults(func=cmd_serve)
+
+    st = sub.add_parser("stream", help="record the public WebSocket stream (with reconnection)")
+    st.add_argument("--symbol", default="fUST")
+    st.add_argument("--book-length", type=int, default=100, choices=[1, 25, 100, 250])
+    st.add_argument("--flush-every", type=float, default=60.0, help="seconds between writes")
+    st.set_defaults(func=cmd_stream)
 
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser
