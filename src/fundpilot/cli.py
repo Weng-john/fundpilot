@@ -16,6 +16,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -431,6 +432,59 @@ def cmd_rl(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def _agent(settings: Settings, sessions: sessionmaker[Session], symbol: str) -> Any:
+    from fundpilot.agents.llm import OpenAICompatibleClient  # noqa: PLC0415
+    from fundpilot.agents.supervisor import SupervisorAgent  # noqa: PLC0415
+
+    llm = None
+    if settings.llm_base_url and settings.llm_model:
+        key = settings.llm_api_key.get_secret_value() if settings.llm_api_key else None
+        llm = OpenAICompatibleClient(settings.llm_base_url, settings.llm_model, key)
+    return SupervisorAgent(sessions, symbol=symbol, llm=llm)
+
+
+def cmd_agent(settings: Settings, args: argparse.Namespace) -> int:
+    from fundpilot.agents.recommendations import RecommendationStore  # noqa: PLC0415
+
+    with _sessions(settings) as sessions:
+        if args.agent_command == "report":
+            text = _agent(settings, sessions, args.symbol).report(
+                args.period, account=args.account, use_llm=args.llm
+            )
+            if args.output:
+                Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+                Path(args.output).write_text(text)
+            print(text)
+        elif args.agent_command == "ask":
+            result = _agent(settings, sessions, args.symbol).ask(args.question)
+            print(result["answer"])
+            print(f"(tool calls: {[c['name'] for c in result['tool_calls']]})", file=sys.stderr)
+        elif args.agent_command == "recommendations":
+            store = RecommendationStore(sessions)
+            if args.action == "list":
+                _print(
+                    [
+                        {
+                            "id": r.id,
+                            "parameter": r.parameter,
+                            "value": r.proposed_value,
+                            "risk_increasing": r.risk_increasing,
+                            "source": r.source,
+                            "rationale": r.rationale,
+                            "status": r.status,
+                        }
+                        for r in store.list(None if args.all else "proposed")
+                    ]
+                )
+            else:
+                if args.id is None:
+                    print("a recommendation id is required", file=sys.stderr)
+                    return 2
+                status = store.decide(args.id, args.action == "accept", by=args.by)
+                print(f"recommendation {args.id}: {status} (edit your config to apply it)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fundpilot", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -533,6 +587,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="use generated SYNTHETIC data (pipeline demo only)",
     )
     rl.set_defaults(func=cmd_rl)
+
+    agent = sub.add_parser("agent", help="supervisory agent (read-only; optional LLM)")
+    agent_sub = agent.add_subparsers(dest="agent_command", required=True)
+    rep = agent_sub.add_parser("report", help="daily/weekly report (deterministic by default)")
+    rep.add_argument("--period", choices=["daily", "weekly"], default="daily")
+    rep.add_argument("--symbol", default="fUST")
+    rep.add_argument("--account", default=None, help="paper account to review")
+    rep.add_argument("--llm", action="store_true", help="append AI commentary (needs LLM)")
+    rep.add_argument("--output", default=None)
+    rep.set_defaults(func=cmd_agent)
+    ask = agent_sub.add_parser("ask", help="ask a question (needs LLM; read-only tools)")
+    ask.add_argument("question")
+    ask.add_argument("--symbol", default="fUST")
+    ask.set_defaults(func=cmd_agent)
+    recs = agent_sub.add_parser("recommendations", help="review agent recommendations")
+    recs.add_argument("action", choices=["list", "accept", "reject"])
+    recs.add_argument("id", nargs="?", type=int)
+    recs.add_argument("--all", action="store_true")
+    recs.add_argument("--by", default="operator")
+    recs.set_defaults(func=cmd_agent)
 
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser
