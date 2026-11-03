@@ -41,10 +41,12 @@ Sources: docs.bitfinex.com fetched as `.md` with `curl`, plus live API calls. Fu
   - funding stats: 719 rows (hourly)
   - fUST 1h candles `a30:p2:p30`: 729 rows
   - tBTCUSD / tETHUSD 1h candles: 726 rows each
-- `fUST` trades: ~209k rows reaching back to 2026-10-23 when this was written; the backfill was still running.
-  - Roughly 20k trades/day; 93 % are funding taken.
+- `fUST` trades: **496,471 rows, 2026-10-04 00:01 → 2026-11-03 08:24 (complete, no warnings)**.
+  - Roughly 16k trades/day; 93 % are funding taken.
   - About 90 % are 2-day loans, at roughly 6 % APR.
   - The FRR at the time was ~9.2 % APR, above most traded rates.
+- Reconstructed FRR tickers: 729 rows (`origin=reconstructed`). **Next-step 2 is done.**
+- Next-step 3 (real-data backtest) was started; output goes to `experiments/outputs/real_baselines_30d/` (git-ignored). If it is missing, re-run step 3.
 
 ## Next steps (in order)
 
