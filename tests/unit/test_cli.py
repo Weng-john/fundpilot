@@ -21,7 +21,10 @@ def db_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
 def test_defaults_are_safe() -> None:
     settings = Settings(_env_file=None)
     assert settings.execution_mode is ExecutionMode.DRY_RUN
-    assert not any("key" in name or "secret" in name for name in Settings.model_fields)
+    secrets = [n for n in Settings.model_fields if "key" in n or "secret" in n]
+    assert secrets == ["llm_api_key"]  # LLM provider only; no exchange credentials
+    assert not any("bitfinex" in n and ("key" in n or "secret" in n) for n in Settings.model_fields)
+    assert settings.llm_api_key is None
 
 
 def test_db_upgrade_status_and_prune(db_env: str, capsys: pytest.CaptureFixture[str]) -> None:
@@ -51,3 +54,13 @@ def test_operational_commands(db_env: str, capsys: pytest.CaptureFixture[str]) -
     assert cli.main(["approvals", "list"]) == 0
     assert cli.main(["approvals", "approve"]) == 2
     assert cli.main(["paper", "status", "--account", "nope"]) == 1
+
+
+def test_agent_commands(db_env: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["db", "upgrade"]) == 0
+    out = tmp_path / "r.md"
+    assert cli.main(["agent", "report", "--period", "weekly", "--output", str(out)]) == 0
+    assert "# FundPilot weekly report" in out.read_text()
+    assert cli.main(["agent", "recommendations", "list"]) == 0
+    assert cli.main(["agent", "recommendations", "accept"]) == 2
+    capsys.readouterr()
