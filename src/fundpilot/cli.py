@@ -485,6 +485,15 @@ def cmd_agent(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(settings: Settings, args: argparse.Namespace) -> int:
+    import uvicorn  # noqa: PLC0415 - optional `api` extra
+
+    from fundpilot.api.app import create_app  # noqa: PLC0415
+
+    uvicorn.run(create_app(settings), host=args.host, port=args.port, log_level="info")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fundpilot", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -607,6 +616,11 @@ def build_parser() -> argparse.ArgumentParser:
     recs.add_argument("--all", action="store_true")
     recs.add_argument("--by", default="operator")
     recs.set_defaults(func=cmd_agent)
+
+    serve = sub.add_parser("serve", help="run the dashboard API (read-only + emergency stop)")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.set_defaults(func=cmd_serve)
 
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser

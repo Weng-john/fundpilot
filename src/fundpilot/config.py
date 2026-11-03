@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_api_key: SecretStr | None = None
 
+    # -- dashboard API --------------------------------------------------
+    # Write endpoints (only "emergency stop") are disabled unless a token is set.
+    api_token: SecretStr | None = None
+    api_reports_root: str = "experiments/outputs"
+    api_models_root: str = "models"
+
     # -- retention (days; 0 = keep forever) -----------------------------
     retention_book_snapshots_days: int = 90
     retention_tickers_days: int = 0

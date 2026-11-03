@@ -21,6 +21,10 @@ ml = [
     "lightgbm>=4.3",
 ]
 
+api = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
 rl = [
     "numpy>=1.26",
     "gymnasium>=1.0,<2",
@@ -32,6 +36,7 @@ fundpilot = "fundpilot.cli:main"
 
 [dependency-groups]
 dev = [
+    "fastapi>=0.115",
     "numpy>=1.26",
     "gymnasium>=1.0,<2",
     "lightgbm>=4.3",
@@ -61,6 +66,7 @@ ignore = ["PLR0913", "PLR2004", "PLR0911", "PLR0917"]
 "tests/**" = ["S101", "PLR2004", "S105", "S106", "S311", "C408"]
 "migrations/**" = ["E501"]
 "src/fundpilot/cli.py" = ["PLR0915"]
+"src/fundpilot/api/app.py" = ["PLR0915"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -70,7 +76,7 @@ mypy_path = "src"
 packages = ["fundpilot"]
 
 [[tool.mypy.overrides]]
-module = ["alembic.*", "lightgbm.*", "stable_baselines3.*"]
+module = ["alembic.*", "lightgbm.*", "stable_baselines3.*", "uvicorn.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -79,4 +85,7 @@ addopts = "-ra --strict-markers"
 markers = [
     "integration: requires a real PostgreSQL instance (FUNDPILOT_TEST_DATABASE_URL)",
 ]
-filterwarnings = ["error::DeprecationWarning:fundpilot.*"]
+filterwarnings = [
+    "error::DeprecationWarning:fundpilot.*",
+    "ignore:Using `httpx` with `starlette.testclient`",
+]
