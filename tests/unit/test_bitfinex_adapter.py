@@ -14,6 +14,7 @@ from tests.conftest import FIXED_NOW, FIXTURES
 
 ROUTES = {
     "/v2/platform/status": [1],
+    "/v2/ticker/tUSTUSD": [0.9998, 1, 1.0001, 1, 0, 0, 0.99995, 1000, 1.001, 0.999],
     "/v2/ticker/fUST": "funding_ticker.json",
     "/v2/book/fUST/P0": "funding_book_p0.json",
     "/v2/book/fUST/R0": "funding_book_r0.json",
@@ -70,6 +71,12 @@ def test_endpoints(adapter: BitfinexPublicAdapter, requests_seen: list[httpx.Req
 
     candles = adapter.get_funding_candles("fUST", "1h")
     assert candles[0].candle_key == "trade:1h:fUST:a30:p2:p30"
+
+
+def test_last_price(adapter: BitfinexPublicAdapter) -> None:
+    assert adapter.get_last_price("tUSTUSD") == Decimal("0.99995")
+    with pytest.raises(ValueError):
+        adapter.get_last_price("fUST")
 
 
 def test_argument_validation(adapter: BitfinexPublicAdapter) -> None:

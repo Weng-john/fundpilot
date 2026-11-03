@@ -102,3 +102,16 @@ def test_prune_counts_on_postgres(pg_sessions: sessionmaker[Session]) -> None:
     with session_scope(pg_sessions) as s:
         result = retention.prune(s, "funding_trades", FIXED_NOW - timedelta(days=5), dry_run=False)
         assert (result.matched, result.deleted) == (5, 5)
+
+
+def test_paper_engine_on_postgres(pg_sessions: sessionmaker[Session]) -> None:
+    from tests.unit.test_paper import Clock, _engine  # noqa: PLC0415
+
+    clock = Clock()
+    engine, _ = _engine(pg_sessions, clock)
+    for _ in range(4):
+        engine.step()
+        clock.tick()
+    resumed, _ = _engine(pg_sessions, clock)
+    assert resumed.account.available == engine.account.available
+    assert len(resumed.account.credits) == len(engine.account.credits)

@@ -38,3 +38,16 @@ def test_db_upgrade_status_and_prune(db_env: str, capsys: pytest.CaptureFixture[
 def test_parser_requires_command() -> None:
     with pytest.raises(SystemExit):
         cli.main([])
+
+
+def test_operational_commands(db_env: str, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["db", "upgrade"]) == 0
+    assert cli.main(["emergency-stop", "--reason", "drill"]) == 0
+    assert "cannot be recalled" in capsys.readouterr().out
+    assert cli.main(["alerts"]) == 0
+    assert "emergency_stop" in capsys.readouterr().out
+    assert cli.main(["resume"]) == 2  # needs --confirm
+    assert cli.main(["resume", "--confirm"]) == 0
+    assert cli.main(["approvals", "list"]) == 0
+    assert cli.main(["approvals", "approve"]) == 2
+    assert cli.main(["paper", "status", "--account", "nope"]) == 1
