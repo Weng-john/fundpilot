@@ -1,7 +1,7 @@
 """Application settings loaded from environment variables (prefix ``FUNDPILOT_``).
 
-No credential fields exist in Phase 1: the public market-data pipeline does not
-need them. Live execution is not implemented and cannot be switched on here.
+There are no exchange credential fields: market data is public and live execution is not
+implemented. The only secret is an optional LLM provider key for the supervisory agent.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     min_funding_period_days: int = 2
     max_funding_period_days: int = 120
     staleness_threshold_seconds: int = 300
+
+    # -- optional OpenAI-compatible LLM for the supervisory agent -------
+    # Leave unset to run fully deterministic (no LLM). This key is for the LLM provider only;
+    # FundPilot has no exchange credential settings.
+    llm_base_url: str | None = None
+    llm_model: str | None = None
+    llm_api_key: SecretStr | None = None
 
     # -- retention (days; 0 = keep forever) -----------------------------
     retention_book_snapshots_days: int = 90
