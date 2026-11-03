@@ -469,3 +469,26 @@ class AgentActivityRow(Base):
     detail: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     __table_args__ = (Index("ix_agent_activity_at", "at"),)
+
+
+class TradingCandleRow(Base):
+    """Trading-pair candles (e.g. BTC/USD) used for volatility indicators."""
+
+    __tablename__ = "trading_candles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exchange: Mapped[str] = mapped_column(String(32), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    timeframe: Mapped[str] = mapped_column(String(8), nullable=False)
+    open_time: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    open: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    close: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    high: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    low: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    volume: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    origin: Mapped[str] = _origin_column()
+
+    __table_args__ = (
+        UniqueConstraint("exchange", "symbol", "timeframe", "open_time"),
+        CheckConstraint(f"origin IN {ORIGIN_VALUES}", name="origin"),
+    )

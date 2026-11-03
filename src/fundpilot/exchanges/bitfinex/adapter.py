@@ -13,11 +13,16 @@ from fundpilot.core.models import (
     FundingStat,
     FundingTicker,
     FundingTrade,
+    TradingCandle,
 )
 from fundpilot.core.time import to_ms, utc_now
 from fundpilot.exchanges.bitfinex import parsers
 from fundpilot.exchanges.bitfinex.client import BitfinexRestClient
-from fundpilot.exchanges.bitfinex.symbols import funding_candle_key, validate_funding_symbol
+from fundpilot.exchanges.bitfinex.symbols import (
+    CANDLE_TIMEFRAMES,
+    funding_candle_key,
+    validate_funding_symbol,
+)
 from fundpilot.exchanges.ratelimit import TokenBucket
 
 AGGREGATED_PRECISIONS = frozenset({"P0", "P1", "P2", "P3", "P4"})
@@ -70,6 +75,26 @@ class BitfinexPublicAdapter:
         if not pair.startswith("t") or len(pair) < 4:
             raise ValueError(f"not a Bitfinex trading pair: {pair!r}")
         return parsers.parse_trading_last_price(self._client.get(f"ticker/{pair}"))
+
+    def get_trading_candles(
+        self,
+        pair: str,
+        timeframe: str = "1h",
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        limit: int | None = None,
+    ) -> list[TradingCandle]:
+        """Candles of a trading pair (e.g. ``tBTCUSD``) for volatility indicators."""
+        if not pair.startswith("t") or len(pair) < 4:
+            raise ValueError(f"not a Bitfinex trading pair: {pair!r}")
+        if timeframe not in CANDLE_TIMEFRAMES:
+            raise ValueError(f"unsupported candle timeframe: {timeframe!r}")
+        payload = self._client.get(
+            f"candles/trade:{timeframe}:{pair}/hist",
+            {"start": _ms(start), "end": _ms(end), "limit": limit, "sort": -1},
+        )
+        return parsers.parse_trading_candles(payload, symbol=pair, timeframe=timeframe)
 
     def get_funding_book(
         self, symbol: str, precision: str = "P0", length: int = 100

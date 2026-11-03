@@ -9,13 +9,14 @@ Rows are filtered by ``origin``; by default only genuine exchange observations
 from __future__ import annotations
 
 from bisect import bisect_right
-from collections.abc import Collection, Iterator
-from dataclasses import dataclass
+from collections.abc import Collection, Iterator, Mapping
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from fundpilot.core.indicators import VolatilitySeries
 from fundpilot.core.models import (
     BookSide,
     DataOrigin,
@@ -23,9 +24,15 @@ from fundpilot.core.models import (
     FundingBookSnapshot,
     FundingTicker,
     FundingTrade,
+    TradingCandle,
 )
 from fundpilot.core.time import ensure_utc
-from fundpilot.data.models import FundingBookSnapshotRow, FundingTickerRow, FundingTradeRow
+from fundpilot.data.models import (
+    FundingBookSnapshotRow,
+    FundingTickerRow,
+    FundingTradeRow,
+    TradingCandleRow,
+)
 from fundpilot.strategies.base import MarketState
 
 _TICKER_FIELDS = (
@@ -57,6 +64,10 @@ class FeedConfig:
     max_staleness: timedelta = timedelta(minutes=5)
     book_precision: str = "P0"
     origins: Collection[DataOrigin] = (DataOrigin.EXCHANGE_API,)
+    # trading pairs whose realised volatility becomes MarketState.indicators
+    volatility_pairs: Mapping[str, str] = field(
+        default_factory=lambda: {"btc_rv_24h": "tBTCUSD", "eth_rv_24h": "tETHUSD"}
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +89,7 @@ class MarketFeed:
         tickers: list[FundingTicker],
         books: list[FundingBookSnapshot],
         trades: list[FundingTrade],
+        volatility: Mapping[str, VolatilitySeries] | None = None,
     ) -> None:
         if config.step <= timedelta(0):
             raise ValueError("step must be positive")
@@ -88,6 +100,7 @@ class MarketFeed:
         self._book_ts = [b.captured_at for b in self._books]
         self._trades = sorted(trades, key=lambda t: t.executed_at)
         self._trade_ts = [t.executed_at for t in self._trades]
+        self._volatility = dict(volatility or {})
 
     @property
     def provenance(self) -> FeedProvenance:
@@ -116,7 +129,10 @@ class MarketFeed:
             or t - ticker.observed_at > cfg.max_staleness
             or t - book.captured_at > cfg.max_staleness
         )
-        return MarketState(t, cfg.symbol, ticker, book, tuple(self._trades[lo:hi]), stale)
+        indicators = {name: series.at(t) for name, series in self._volatility.items()}
+        return MarketState(
+            t, cfg.symbol, ticker, book, tuple(self._trades[lo:hi]), stale, indicators
+        )
 
     def __iter__(self) -> Iterator[MarketState]:
         t = ensure_utc(self.config.start)
@@ -205,4 +221,32 @@ def load_feed(session: Session, config: FeedConfig) -> MarketFeed:
         )
         for r in trade_rows
     ]
-    return MarketFeed(config, tickers, books, trades)
+    volatility = {}
+    for name, pair in config.volatility_pairs.items():
+        rows = session.scalars(
+            select(TradingCandleRow).where(
+                TradingCandleRow.symbol == pair,
+                TradingCandleRow.timeframe == "1h",
+                TradingCandleRow.open_time >= warmup - timedelta(days=2),
+                TradingCandleRow.open_time <= end,
+                TradingCandleRow.origin.in_(origins),
+            )
+        ).all()
+        volatility[name] = VolatilitySeries(
+            [
+                TradingCandle(
+                    exchange=r.exchange,
+                    symbol=r.symbol,
+                    timeframe=r.timeframe,
+                    open_time=r.open_time,
+                    open=r.open,
+                    close=r.close,
+                    high=r.high,
+                    low=r.low,
+                    volume=r.volume,
+                    origin=DataOrigin(r.origin),
+                )
+                for r in rows
+            ]
+        )
+    return MarketFeed(config, tickers, books, trades, volatility)

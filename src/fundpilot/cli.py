@@ -34,7 +34,7 @@ from fundpilot.data.models import PaperAccountStateRow
 from fundpilot.exchanges.bitfinex import BitfinexPublicAdapter
 from fundpilot.execution.controls import Controls
 from fundpilot.paper.engine import PaperConfig, PaperTradingEngine
-from fundpilot.paper.source import HealthMonitor, LiveMarketSource
+from fundpilot.paper.source import HealthMonitor, LiveMarketSource, VolatilityProvider
 
 
 def _parse_dt(value: str) -> datetime:
@@ -99,7 +99,11 @@ def cmd_backfill(settings: Settings, args: argparse.Namespace) -> int:
     start, end = _parse_dt(args.start), _parse_dt(args.end) if args.end else utc_now()
     try:
         with _sessions(settings) as sessions:
-            if args.dataset == "stats":
+            if args.dataset == "volatility":
+                report = backfill.backfill_trading_candles(
+                    adapter, sessions, args.symbol, start, end
+                )
+            elif args.dataset == "stats":
                 report = backfill.backfill_funding_stats(adapter, sessions, args.symbol, start, end)
             elif args.dataset == "trades":
                 report = backfill.backfill_trades(adapter, sessions, args.symbol, start, end)
@@ -253,7 +257,8 @@ def cmd_paper_run(settings: Settings, args: argparse.Namespace) -> int:
     try:
         with _sessions(settings) as sessions:
             controls = Controls(sessions)
-            source = LiveMarketSource(adapter, config.symbol)
+            vol = VolatilityProvider(lambda pair: adapter.get_trading_candles(pair, "1h", limit=48))
+            source = LiveMarketSource(adapter, config.symbol, indicators=vol)
             pair = config.stablecoin_pair
             monitor = HealthMonitor(
                 controls,
@@ -534,7 +539,11 @@ def build_parser() -> argparse.ArgumentParser:
     collect.set_defaults(func=cmd_collect)
 
     bf = sub.add_parser("backfill", help="historical backfill")
-    bf.add_argument("dataset", choices=["stats", "trades", "candles"])
+    bf.add_argument(
+        "dataset",
+        choices=["stats", "trades", "candles", "volatility"],
+        help="volatility = 1h trading candles of --symbol (e.g. tBTCUSD)",
+    )
     bf.add_argument("--symbol", default="fUST")
     bf.add_argument("--start", required=True, help="ISO-8601, UTC if no offset")
     bf.add_argument("--end", default=None)

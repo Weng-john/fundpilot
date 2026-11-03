@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     raw_book_length: int = 100
     trades_limit: int = 1000
     collect_interval_seconds: int = Field(default=60, ge=10)
+    # trading pairs whose 1h candles feed BTC/ETH volatility indicators (codes per SDK usage)
+    volatility_pairs: list[str] = Field(default_factory=lambda: ["tBTCUSD", "tETHUSD"])
 
     # -- data quality --------------------------------------------------
     max_plausible_daily_rate: Decimal = Decimal("0.07")

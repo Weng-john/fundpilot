@@ -131,3 +131,18 @@ class FundingTrade(_Timestamped):
     rate: Decimal
     period_days: int
     origin: DataOrigin = DataOrigin.EXCHANGE_API
+
+
+class TradingCandle(_Timestamped):
+    """OHLCV of a *trading* pair (e.g. tBTCUSD), used for volatility indicators."""
+
+    exchange: str
+    symbol: str
+    timeframe: str
+    open_time: datetime
+    open: Decimal
+    close: Decimal
+    high: Decimal
+    low: Decimal
+    volume: Decimal
+    origin: DataOrigin = DataOrigin.EXCHANGE_API

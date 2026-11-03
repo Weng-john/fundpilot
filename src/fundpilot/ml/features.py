@@ -26,6 +26,10 @@ WINDOWS: tuple[tuple[str, timedelta], ...] = (
 )
 
 
+# Annualised realised volatility of BTC/ETH from completed 1h candles over 24 h.
+INDICATOR_FEATURES = ("btc_rv_24h", "eth_rv_24h")
+
+
 def _f(x: Decimal | None) -> float:
     return NAN if x is None else float(x)
 
@@ -67,6 +71,7 @@ class FeatureBuilder:
             "hour_sin",
             "hour_cos",
             "weekday",
+            *INDICATOR_FEATURES,
         ]
         return names
 
@@ -108,6 +113,7 @@ class FeatureBuilder:
             math.cos(2 * math.pi * hour / 24),
             float(now.weekday()),
         ]
+        out += [float(m.indicators.get(name, NAN)) for name in INDICATOR_FEATURES]
         if have:
             self._history.append((now, frr))
         return out

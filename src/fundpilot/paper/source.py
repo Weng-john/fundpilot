@@ -8,7 +8,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from fundpilot.core.models import FundingBookSnapshot, FundingTicker, FundingTrade
+from fundpilot.core.indicators import VolatilitySeries
+from fundpilot.core.models import (
+    FundingBookSnapshot,
+    FundingTicker,
+    FundingTrade,
+    TradingCandle,
+)
 from fundpilot.core.time import utc_now
 from fundpilot.exchanges.base import FundingMarketDataAdapter
 from fundpilot.execution.controls import Controls
@@ -35,6 +41,7 @@ class LiveMarketSource:
     trade_lookback: timedelta = timedelta(hours=24)
     max_staleness: timedelta = timedelta(minutes=5)
     clock: Callable[[], datetime] = utc_now
+    indicators: Callable[[datetime], dict[str, float]] | None = None
     consecutive_failures: int = 0
     last_success_at: datetime | None = None
     _ticker: FundingTicker | None = None
@@ -67,7 +74,34 @@ class LiveMarketSource:
         if self.last_success_at is None or now - self.last_success_at > self.max_staleness:
             stale = True
         trades = tuple(sorted(self._trades.values(), key=lambda t: t.executed_at))
-        return MarketState(now, self.symbol, self._ticker, self._book, trades, stale)
+        indicators: dict[str, float] = {}
+        if self.indicators is not None:
+            try:
+                indicators = self.indicators(now)
+            except Exception as exc:  # indicators are optional inputs
+                logger.warning("indicator refresh failed: %s", exc)
+        return MarketState(now, self.symbol, self._ticker, self._book, trades, stale, indicators)
+
+
+@dataclass(slots=True)
+class VolatilityProvider:
+    """Refreshes 1h trading candles periodically and serves point-in-time realised volatility."""
+
+    fetch: Callable[[str], list[TradingCandle]]  # pair -> recent 1h candles
+    pairs: dict[str, str] = field(
+        default_factory=lambda: {"btc_rv_24h": "tBTCUSD", "eth_rv_24h": "tETHUSD"}
+    )
+    refresh: timedelta = timedelta(minutes=30)
+    _series: dict[str, VolatilitySeries] = field(default_factory=dict)
+    _refreshed_at: datetime | None = None
+
+    def __call__(self, now: datetime) -> dict[str, float]:
+        if self._refreshed_at is None or now - self._refreshed_at >= self.refresh:
+            self._series = {
+                name: VolatilitySeries(self.fetch(pair)) for name, pair in self.pairs.items()
+            }
+            self._refreshed_at = now
+        return {name: s.at(now) for name, s in self._series.items()}
 
 
 @dataclass(slots=True)

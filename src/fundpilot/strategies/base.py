@@ -9,6 +9,7 @@ and returns a :class:`Decision`. Strategies may keep internal state across calls
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -32,6 +33,8 @@ class MarketState:
     book: FundingBookSnapshot | None = None
     trades: tuple[FundingTrade, ...] = ()  # recent trades, all executed_at <= as_of
     stale: bool = False  # inputs older than the configured staleness threshold
+    # point-in-time external indicators, e.g. {"btc_rv_24h": 0.45} (annualised volatility)
+    indicators: Mapping[str, float] = field(default_factory=dict)
 
     @property
     def frr(self) -> Decimal | None:
