@@ -65,6 +65,12 @@ class BitfinexPublicAdapter:
     def is_operational(self) -> bool:
         return parsers.parse_platform_status(self._client.get("platform/status"))
 
+    def get_last_price(self, pair: str) -> Decimal:
+        """Last traded price of a trading pair, e.g. ``tUSTUSD`` (pair code unverified)."""
+        if not pair.startswith("t") or len(pair) < 4:
+            raise ValueError(f"not a Bitfinex trading pair: {pair!r}")
+        return parsers.parse_trading_last_price(self._client.get(f"ticker/{pair}"))
+
     def get_funding_book(
         self, symbol: str, precision: str = "P0", length: int = 100
     ) -> FundingBookSnapshot:

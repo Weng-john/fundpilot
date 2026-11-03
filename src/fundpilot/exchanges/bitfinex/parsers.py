@@ -245,3 +245,12 @@ def parse_platform_status(payload: Any) -> bool:
     """``platform/status`` returns ``[1]`` when operative, ``[0]`` in maintenance."""
     row = _row(payload, 1, "platform status")
     return _int(row[0], "status") == 1
+
+
+TRADING_TICKER_LEN = 10
+
+
+def parse_trading_last_price(payload: Any) -> Decimal:
+    """Trading ticker ``ticker/t{PAIR}``: 10 fields, ``LAST_PRICE`` at index 6 (per SDK)."""
+    row = _row(payload, TRADING_TICKER_LEN, "trading ticker")
+    return _dec(row[6], "last_price")
