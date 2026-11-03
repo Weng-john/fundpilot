@@ -14,10 +14,15 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from fundpilot.backtesting.experiment import ExperimentConfig, run_experiment, write_report
+from fundpilot.backtesting.feed import FeedConfig, MarketFeed, load_feed
+from fundpilot.backtesting.synthetic import SyntheticConfig, generate
 from fundpilot.config import Settings, get_settings
+from fundpilot.core.models import DataOrigin
 from fundpilot.core.time import utc_now
 from fundpilot.data import backfill, quality, repository, retention
 from fundpilot.data.db import create_db_engine, make_session_factory, session_scope
@@ -164,6 +169,78 @@ def cmd_status(settings: Settings, _: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_demo_data(settings: Settings, args: argparse.Namespace) -> int:
+    cfg = SyntheticConfig(
+        symbol=args.symbol, start=_parse_dt(args.start), days=args.days, seed=args.seed
+    )
+    tickers, books, trades = generate(cfg)
+    with _sessions(settings) as sessions, session_scope(sessions) as session:
+        inserted = repository.save_tickers(session, tickers) + repository.save_trades(
+            session, trades
+        )
+        for book in books:
+            repository.save_book_snapshot(session, book)
+    _print(
+        {
+            "origin": "synthetic",
+            "tickers": len(tickers),
+            "books": len(books),
+            "trades": len(trades),
+            "rows_inserted_excluding_books": inserted,
+            "warning": "SYNTHETIC DATA - excluded from backtests unless allow_synthetic",
+        }
+    )
+    return 0
+
+
+def cmd_backtest(settings: Settings, args: argparse.Namespace) -> int:
+    config = ExperimentConfig.from_toml(Path(args.config))
+    origins = [DataOrigin.EXCHANGE_API]
+    if config.allow_synthetic or args.allow_synthetic or args.synthetic_demo:
+        origins.append(DataOrigin.SYNTHETIC)
+    feed_cfg = FeedConfig(
+        exchange=config.exchange,
+        symbol=config.symbol,
+        start=config.start,
+        end=config.end,
+        step=config.step,
+        origins=tuple(origins),
+    )
+    if args.synthetic_demo:
+        days = max(1, int((config.end - config.start).total_seconds() // 86_400))
+        tickers, books, trades = generate(
+            SyntheticConfig(
+                symbol=config.symbol, start=config.start, days=days, seed=config.simulation.seed
+            )
+        )
+        feed = MarketFeed(
+            FeedConfig(
+                exchange=config.exchange,
+                symbol=config.symbol,
+                start=config.start,
+                end=config.end,
+                step=config.step,
+                origins=(DataOrigin.SYNTHETIC,),
+            ),
+            tickers,
+            books,
+            trades,
+        )
+    else:
+        with _sessions(settings) as sessions, session_scope(sessions) as session:
+            feed = load_feed(session, feed_cfg)
+    report = run_experiment(config, feed, feed.provenance, now=utc_now())
+    out = (
+        Path(args.output)
+        if args.output
+        else (Path("experiments/outputs") / config.name / utc_now().strftime("%Y%m%dT%H%M%SZ"))
+    )
+    json_path, md_path = write_report(report, out)
+    print(report.to_markdown())
+    print(f"wrote {json_path} and {md_path}", file=sys.stderr)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fundpilot", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -195,6 +272,28 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--older-than-days", type=int, required=True)
     pr.add_argument("--confirm", action="store_true", help="actually delete rows")
     pr.set_defaults(func=cmd_prune)
+
+    demo = sub.add_parser("demo-data", help="write SYNTHETIC demo data (origin=synthetic)")
+    demo.add_argument("--symbol", default="fUST")
+    demo.add_argument("--start", default="2026-01-01T00:00:00+00:00")
+    demo.add_argument("--days", type=int, default=3)
+    demo.add_argument("--seed", type=int, default=42)
+    demo.set_defaults(func=cmd_demo_data)
+
+    bt = sub.add_parser("backtest", help="run a backtest experiment (SIMULATED results)")
+    bt.add_argument("config", help="experiment TOML file")
+    bt.add_argument("--output", default=None, help="output directory")
+    bt.add_argument(
+        "--allow-synthetic",
+        action="store_true",
+        help="include origin=synthetic rows from the database",
+    )
+    bt.add_argument(
+        "--synthetic-demo",
+        action="store_true",
+        help="generate synthetic data in memory instead of reading the database",
+    )
+    bt.set_defaults(func=cmd_backtest)
 
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser
