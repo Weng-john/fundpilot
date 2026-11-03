@@ -18,6 +18,8 @@ src/fundpilot/
 │   ├── ratelimit.py     # token bucket
 │   ├── errors.py
 │   └── bitfinex/        # ALL Bitfinex-specific code: client, parsers, symbols, adapter
+├── strategies/          # Strategy protocol, constraints, 5 baselines (no exchange access)
+├── backtesting/         # point-in-time feed, simulator, scenarios, metrics, experiments, synthetic data
 └── data/
     ├── types.py         # ExactDecimal / UTCDateTime portable column types
     ├── models.py        # SQLAlchemy schema
@@ -30,7 +32,7 @@ src/fundpilot/
 migrations/              # Alembic revisions
 ```
 
-Planned (not yet present): `strategies/`, `backtesting/`, `optimization/`, `ml/`, `rl/`,
+Planned (not yet present): `optimization/`, `ml/`, `rl/`,
 `agents/`, `risk/`, `execution/`, `apps/api`, `apps/web`.
 
 ## Data flow (Phase 1)

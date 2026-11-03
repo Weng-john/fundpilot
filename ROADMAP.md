@@ -6,7 +6,7 @@ documented, and CI is green.
 | Phase | Milestone | Status |
 |---|---|---|
 | 1 | Foundation: tooling, CI, settings, Bitfinex public adapter, schema, collection pipeline | **Implemented** (API assumptions pending verification) |
-| 2 | Quantitative baselines: strategy interface, 5 baselines, event-driven backtester, metrics | Not started |
+| 2 | Quantitative baselines: strategy interface, 5 baselines, event-driven backtester, metrics | **Implemented** (no real-data results yet: no stored exchange data) |
 | 3 | Paper trading: virtual execution, portfolio tracking, risk manager, alerts | Not started |
 | 4 | Machine learning: features, rate forecasting, fill probability, calibration | Not started |
 | 5 | Reinforcement learning: Gymnasium env, PPO vs baselines | Not started |

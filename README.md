@@ -16,7 +16,8 @@ FundPilot does **not** assume the answer is yes.
 | Phase | Scope | State |
 |---|---|---|
 | 1 Foundation | tooling, CI, settings, Bitfinex public adapter, DB schema, collection, backfill, data quality, retention | ✅ implemented, tested with mocked responses |
-| 2–7 | baselines, backtester, paper trading, risk, ML, RL, agent, live | not started — see [ROADMAP.md](ROADMAP.md) |
+| 2 Baselines | strategy interface, 5 baseline strategies, event-driven backtester with 3 execution scenarios, metrics, reproducible experiments | ✅ implemented; **no real-data results yet** |
+| 3–7 | paper trading, risk, ML, RL, agent, live | not started — see [ROADMAP.md](ROADMAP.md) |
 
 **Important limitations**
 
@@ -34,6 +35,8 @@ uv run fundpilot db upgrade        # SQLite at ./data/fundpilot.sqlite by defaul
 uv run fundpilot collect --once    # public Bitfinex funding data for fUST
 uv run fundpilot status
 uv run pytest                      # all tests use mocked exchange responses
+# exercise the backtester on clearly labelled SYNTHETIC data (not market evidence):
+uv run fundpilot backtest experiments/baseline_comparison.toml --synthetic-demo
 ```
 
 PostgreSQL via Docker:
