@@ -14,6 +14,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -28,7 +29,11 @@ from fundpilot.data import backfill, quality, repository, retention
 from fundpilot.data.db import create_db_engine, make_session_factory, session_scope
 from fundpilot.data.ingestion import MarketDataCollector
 from fundpilot.data.migrate import upgrade
+from fundpilot.data.models import PaperAccountStateRow
 from fundpilot.exchanges.bitfinex import BitfinexPublicAdapter
+from fundpilot.execution.controls import Controls
+from fundpilot.paper.engine import PaperConfig, PaperTradingEngine
+from fundpilot.paper.source import HealthMonitor, LiveMarketSource
 
 
 def _parse_dt(value: str) -> datetime:
@@ -241,6 +246,115 @@ def cmd_backtest(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_paper_run(settings: Settings, args: argparse.Namespace) -> int:
+    config = PaperConfig.from_toml(Path(args.config))
+    adapter = BitfinexPublicAdapter.from_settings(settings)
+    try:
+        with _sessions(settings) as sessions:
+            controls = Controls(sessions)
+            source = LiveMarketSource(adapter, config.symbol)
+            pair = config.stablecoin_pair
+            monitor = HealthMonitor(
+                controls,
+                source,
+                platform_check=adapter.is_operational,
+                stablecoin_price=(lambda: adapter.get_last_price(pair)) if pair else None,
+            )
+            engine = PaperTradingEngine(config, source, monitor, sessions, controls=controls)
+            print(
+                f"paper trading account {config.account!r} (SIMULATED fills on live data)",
+                file=sys.stderr,
+            )
+            engine.run(iterations=args.iterations)
+    finally:
+        adapter.close()
+    return 0
+
+
+def cmd_paper_status(settings: Settings, args: argparse.Namespace) -> int:
+    with _sessions(settings) as sessions, session_scope(sessions) as session:
+        row = session.get(PaperAccountStateRow, args.account)
+        if row is None:
+            print(f"no paper account {args.account!r}", file=sys.stderr)
+            return 1
+        state = row.state
+        _print(
+            {
+                "account": args.account,
+                "mode": "paper (SIMULATED)",
+                "updated_at": row.updated_at,
+                "available": state["available"],
+                "pending_interest": state["pending"],
+                "gross_interest": state["gross"],
+                "fees": state["fees"],
+                "paid": state["paid"],
+                "open_offers": len(state["offers"]),
+                "active_credits": len(state["credits"]),
+                "lent": str(sum((Decimal(c["amount"]) for c in state["credits"]), Decimal(0))),
+            }
+        )
+    return 0
+
+
+def cmd_emergency_stop(settings: Settings, args: argparse.Namespace) -> int:
+    with _sessions(settings) as sessions:
+        print(Controls(sessions).emergency_stop(args.reason, by=args.by))
+    return 0
+
+
+def cmd_resume(settings: Settings, args: argparse.Namespace) -> int:
+    if not args.confirm:
+        print("refusing to resume without --confirm", file=sys.stderr)
+        return 2
+    with _sessions(settings) as sessions:
+        Controls(sessions).resume(by=args.by)
+    print("emergency stop cleared; new offers may be placed again after risk checks")
+    return 0
+
+
+def cmd_approvals(settings: Settings, args: argparse.Namespace) -> int:
+    with _sessions(settings) as sessions:
+        controls = Controls(sessions)
+        if args.action == "list":
+            _print(
+                [
+                    {
+                        "id": r.id,
+                        "account": r.account,
+                        "mode": r.mode,
+                        "payload": r.payload,
+                        "reason": r.reason,
+                        "expires_at": r.expires_at,
+                    }
+                    for r in controls.pending_approvals()
+                ]
+            )
+            return 0
+        if args.id is None:
+            print("an approval id is required", file=sys.stderr)
+            return 2
+        status = controls.decide_approval(args.id, args.action == "approve", by=args.by)
+        print(f"approval {args.id}: {status}")
+    return 0
+
+
+def cmd_alerts(settings: Settings, args: argparse.Namespace) -> int:
+    with _sessions(settings) as sessions:
+        _print(
+            [
+                {
+                    "at": a.at,
+                    "source": a.source,
+                    "code": a.code,
+                    "severity": a.severity,
+                    "message": a.message,
+                }
+                for a in Controls(sessions).recent_alerts(args.limit)
+            ]
+        )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fundpilot", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -294,6 +408,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="generate synthetic data in memory instead of reading the database",
     )
     bt.set_defaults(func=cmd_backtest)
+
+    paper = sub.add_parser("paper", help="paper trading (simulated fills on live public data)")
+    paper_sub = paper.add_subparsers(dest="paper_command", required=True)
+    pr_run = paper_sub.add_parser("run", help="run the paper trading loop")
+    pr_run.add_argument("config", help="paper trading TOML file")
+    pr_run.add_argument("--iterations", type=int, default=None)
+    pr_run.set_defaults(func=cmd_paper_run)
+    pr_status = paper_sub.add_parser("status", help="show a paper account")
+    pr_status.add_argument("--account", required=True)
+    pr_status.set_defaults(func=cmd_paper_status)
+
+    stop = sub.add_parser("emergency-stop", help="suspend all new offers")
+    stop.add_argument("--reason", required=True)
+    stop.add_argument("--by", default="operator")
+    stop.set_defaults(func=cmd_emergency_stop)
+    resume = sub.add_parser("resume", help="clear the emergency stop")
+    resume.add_argument("--confirm", action="store_true")
+    resume.add_argument("--by", default="operator")
+    resume.set_defaults(func=cmd_resume)
+
+    appr = sub.add_parser("approvals", help="manual approval queue")
+    appr.add_argument("action", choices=["list", "approve", "reject"])
+    appr.add_argument("id", nargs="?", type=int)
+    appr.add_argument("--by", default="operator")
+    appr.set_defaults(func=cmd_approvals)
+
+    al = sub.add_parser("alerts", help="recent alerts")
+    al.add_argument("--limit", type=int, default=50)
+    al.set_defaults(func=cmd_alerts)
 
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser

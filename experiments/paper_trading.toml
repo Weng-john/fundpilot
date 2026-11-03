@@ -1,0 +1,30 @@
+# Paper trading: SIMULATED fills against live public market data.
+# No credentials are used; nothing is sent to the exchange.
+account = "paper-ladder"
+exchange = "bitfinex"
+symbol = "fUST"
+scenario = "conservative"   # fill model applied to live data
+poll_interval_seconds = 60
+seed = 1
+# Trading pair used for the USDt depeg check (code UNVERIFIED; remove to disable).
+stablecoin_pair = "tUSTUSD"
+
+[simulation]
+initial_capital = "10000"
+currency = "UST"
+decision_interval_seconds = 300
+
+[strategy]
+id = "ladder"
+type = "adaptive_ladder"
+tilt = "0.8"
+
+[risk]
+max_allocation_fraction = "0.95"
+max_period_days = 120
+max_single_offer = "5000"
+min_daily_rate = "0.00005"
+min_liquidity_fraction = "0.05"
+max_period_concentration = "0.6"
+depeg_threshold = "0.02"
+approval_threshold = "8000"
