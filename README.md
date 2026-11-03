@@ -17,14 +17,16 @@ FundPilot does **not** assume the answer is yes.
 |---|---|---|
 | 1 Foundation | tooling, CI, settings, Bitfinex public adapter, DB schema, collection, backfill, data quality, retention | ✅ implemented, tested with mocked responses |
 | 2 Baselines | strategy interface, 5 baseline strategies, event-driven backtester with 3 execution scenarios, metrics, reproducible experiments | ✅ implemented; **no real-data results yet** |
-| 3–7 | paper trading, risk, ML, RL, agent, live | not started — see [ROADMAP.md](ROADMAP.md) |
+| 3 Paper trading | virtual execution on live data, independent risk manager, execution gateway (dry-run/paper; live refused), idempotency, audit log, manual approvals, emergency stop, alerts | ✅ implemented, tested with scripted data |
+| 4–7 | ML, RL, agent, live | not started — see [ROADMAP.md](ROADMAP.md) |
 
 **Important limitations**
 
 * The Bitfinex adapter has **not yet been run against the live API**, and several unit/format
   assumptions (e.g. the `fUST` symbol, funding-stats FRR scale) are unverified. See
   [docs/bitfinex-integration.md](docs/bitfinex-integration.md).
-* There is no trading code. Nothing in this repository can place, modify or cancel orders.
+* There is no live trading code. Nothing in this repository can place, modify or cancel real
+  exchange orders; `live` execution mode is refused by design.
 * No market data or performance results are included or claimed.
 
 ## Quick start (no API keys needed)
@@ -48,7 +50,7 @@ docker compose up -d --build       # db + migrate + collector
 More: [setup](docs/setup.md) · [architecture](docs/architecture.md) ·
 [database](docs/database.md) · [Bitfinex integration](docs/bitfinex-integration.md) ·
 [deployment](docs/deployment.md) · [security](docs/security.md) ·
-[risk management](docs/risk-management.md) · [strategy guide](docs/strategy-development.md) ·
+[risk management](docs/risk-management.md) · [paper trading](docs/paper-trading.md) · [strategy guide](docs/strategy-development.md) ·
 [backtesting](docs/backtesting.md) · [ML/RL guide](docs/ml-rl-guide.md)
 
 ## Design principles

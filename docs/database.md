@@ -39,6 +39,17 @@ All have `origin` with CHECK ∈ (`exchange_api`, `reconstructed`, `synthetic`).
 `funding_interest_payments` — each keyed by `account` + `mode` (`paper`/`live`) so paper
 results can never be confused with live results.
 
+## Operations (Phase 3, migration `0002`)
+
+| Table | Purpose |
+|---|---|
+| `control_flags` | persistent switches (`emergency_stop`) with reason, who and when |
+| `approval_requests` | manual approval queue: pending / approved / rejected / expired / executed |
+| `execution_audit_log` | append-only record of every execution attempt in every mode |
+| `execution_idempotency_keys` | duplicate-order prevention |
+| `alerts` | risk / operational alerts (deduplicated per code within 30 min) |
+| `paper_account_state` | serialised virtual account so paper trading resumes after restarts |
+
 ## Retention
 
 `fundpilot prune <dataset> --older-than-days N` reports what *would* be deleted.
