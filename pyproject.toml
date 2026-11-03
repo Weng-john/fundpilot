@@ -21,12 +21,19 @@ ml = [
     "lightgbm>=4.3",
 ]
 
+rl = [
+    "numpy>=1.26",
+    "gymnasium>=1.0,<2",
+    "stable-baselines3>=2.4",
+]
+
 [project.scripts]
 fundpilot = "fundpilot.cli:main"
 
 [dependency-groups]
 dev = [
     "numpy>=1.26",
+    "gymnasium>=1.0,<2",
     "lightgbm>=4.3",
     "pytest>=8.2",
     "pytest-cov>=5",
@@ -63,7 +70,7 @@ mypy_path = "src"
 packages = ["fundpilot"]
 
 [[tool.mypy.overrides]]
-module = ["alembic.*", "lightgbm.*"]
+module = ["alembic.*", "lightgbm.*", "stable_baselines3.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
