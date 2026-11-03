@@ -69,6 +69,49 @@ the backtest start.
 
 ## Reinforcement learning
 
-Planned for Phase 5: a Gymnasium environment over `VirtualFundingAccount` that reuses the same
-execution scenarios, with tests for simulator exploitation. RL policies will only emit decisions
-that pass the risk manager and execution gateway.
+Install: `uv sync --extra rl` (gymnasium + Stable-Baselines3, which pulls in PyTorch, several GB).
+CI installs only gymnasium; PPO tests are skipped there.
+
+### Environment (`fundpilot.rl.env.FundingEnv`)
+
+* Built on the same `VirtualFundingAccount` as the backtester, with the same execution scenarios,
+  exchange constraints and — by default — the same `RiskManager` gate. RL policies therefore
+  cannot bypass the risk layer.
+* One step = one decision followed by `decision_every` market steps. Episodes start at a random
+  point of the training window after `warmup` steps of feature history.
+* **Observation** (17 floats, clipped to ±10): FRR level, its deviation/z-score vs. 24 h, 1 h
+  change, spread, book imbalance, trade VWAP premium, long-period share, time of day; portfolio
+  shares available/offered/lent, average remaining lock-up, lent share by period bucket, unpaid
+  interest.
+* **Action** (`MultiDiscrete`): rate premium over FRR × period (2/7/30/120 d) × fraction of free
+  capital × "cancel unfilled offers first" flag.
+* **Reward** (bp of initial capital): net interest accrued − `idle_penalty` × idle capital × FRR ×
+  time − `lock_penalty_per_day` × capital locked beyond `max_lock_days` − `concentration_penalty`
+  × excess period concentration − `action_cost` × actions. Each component is reported in `info`.
+
+### Algorithms
+
+| Policy | Description |
+|---|---|
+| `constant_frr_2d_all` | heuristic: everything at FRR, 2 days |
+| `cem` | cross-entropy method over a linear policy (numpy, deterministic given seed) |
+| `ppo` | Stable-Baselines3 PPO (`MlpPolicy`, CPU) when installed |
+
+### Evaluation (`fundpilot rl CONFIG`)
+
+Policies are trained on the first `train_fraction` of the window (training scenario = first
+scenario listed), then wrapped as `PolicyStrategy` and backtested on the unseen remainder with
+`FundingSimulator` + risk gate next to the baseline strategies under **every** listed scenario.
+Report: `experiments/outputs/rl/<name>/<timestamp>/report.json` with train/test windows, CEM
+training curve, test-environment rewards and backtest metrics with excess vs. baseline.
+
+### Simulator-exploitation tests (`tests/unit/test_rl.py`)
+
+* Gymnasium API compliance (`check_env`).
+* Reward equals the scaled sum of its components; summed reward interest equals the account's
+  accrued net interest (no reward without interest).
+* Random actions conserve capital under all scenarios.
+* Offers at absurd rates earn nothing (only penalties).
+* Observations and rewards before time *t* are unchanged when data after *t* changes.
+* Risk limits bind RL actions.
+* CEM training is deterministic for a given seed.

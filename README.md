@@ -19,7 +19,8 @@ FundPilot does **not** assume the answer is yes.
 | 2 Baselines | strategy interface, 5 baseline strategies, event-driven backtester with 3 execution scenarios, metrics, reproducible experiments | ✅ implemented; **no real-data results yet** |
 | 3 Paper trading | virtual execution on live data, independent risk manager, execution gateway (dry-run/paper; live refused), idempotency, audit log, manual approvals, emergency stop, alerts | ✅ implemented, tested with scripted data |
 | 4 Machine learning | point-in-time features, rate forecasting and fill-probability models (baselines + LightGBM), walk-forward evaluation, calibration, registry, leakage guard | ✅ implemented; no real-data evaluation yet |
-| 5–7 | RL, agent, live | not started — see [ROADMAP.md](ROADMAP.md) |
+| 5 Reinforcement learning | Gymnasium env on the shared account model with the risk gate, CEM + PPO, out-of-sample comparison with baselines, exploitation tests | ✅ implemented; no real-data evaluation yet |
+| 6–7 | AI agent, live | not started — see [ROADMAP.md](ROADMAP.md) |
 
 **Important limitations**
 
