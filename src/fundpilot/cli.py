@@ -370,6 +370,67 @@ def cmd_ml(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_rl(settings: Settings, args: argparse.Namespace) -> int:
+    from fundpilot.rl import evaluate as rl_eval  # noqa: PLC0415 - optional `rl` extra
+
+    cfg = rl_eval.RLConfig.from_toml(Path(args.config))
+    origins: tuple[DataOrigin, ...] = (DataOrigin.EXCHANGE_API,)
+    if args.synthetic_demo:
+        days = max(1, int((cfg.end - cfg.start).total_seconds() // 86_400))
+        t, b, tr = generate(
+            SyntheticConfig(
+                symbol=cfg.symbol, start=cfg.start, days=days, step=cfg.step, seed=cfg.seed
+            )
+        )
+        feed = MarketFeed(
+            FeedConfig(
+                exchange="bitfinex",
+                symbol=cfg.symbol,
+                start=cfg.start,
+                end=cfg.end - cfg.step,
+                step=cfg.step,
+                origins=(DataOrigin.SYNTHETIC,),
+            ),
+            t,
+            b,
+            tr,
+        )
+    else:
+        with _sessions(settings) as sessions, session_scope(sessions) as session:
+            feed = load_feed(
+                session,
+                FeedConfig(
+                    exchange="bitfinex",
+                    symbol=cfg.symbol,
+                    start=cfg.start,
+                    end=cfg.end,
+                    step=cfg.step,
+                    origins=origins,
+                ),
+            )
+    out = (
+        Path(args.output)
+        if args.output
+        else (Path("experiments/outputs/rl") / cfg.name / utc_now().strftime("%Y%m%dT%H%M%SZ"))
+    )
+    report = rl_eval.run(cfg, feed, synthetic=args.synthetic_demo, output=out)
+    _print(
+        {
+            k: report[k]
+            for k in ("warning", "train_window", "test_window", "test_env_rewards", "notes")
+        }
+    )
+    for run in report["backtests"]:
+        m = run["metrics"]
+        print(
+            f"{run['scenario']:>12} {run['strategy']:>28} net_yield="
+            f"{float(m['net_annualized_yield']) * 100:.3f}% excess="
+            f"{run['excess_vs_baseline']}"
+        )
+    print(f"report: {out / 'report.json'}", file=sys.stderr)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fundpilot", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -462,6 +523,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="use generated SYNTHETIC data (pipeline demo only)",
     )
     ml.set_defaults(func=cmd_ml)
+
+    rl = sub.add_parser("rl", help="train RL policies and compare with baselines out-of-sample")
+    rl.add_argument("config", help="RL TOML file")
+    rl.add_argument("--output", default=None)
+    rl.add_argument(
+        "--synthetic-demo",
+        action="store_true",
+        help="use generated SYNTHETIC data (pipeline demo only)",
+    )
+    rl.set_defaults(func=cmd_rl)
 
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser
