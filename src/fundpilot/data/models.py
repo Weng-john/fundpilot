@@ -433,3 +433,39 @@ class PaperAccountStateRow(Base):
     account: Mapped[str] = mapped_column(String(64), primary_key=True)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+# ---------------------------------------------------------------------------
+# AI supervisory agent (Phase 6)
+# ---------------------------------------------------------------------------
+class AgentRecommendationRow(Base):
+    """Validated configuration proposals. Never applied automatically."""
+
+    __tablename__ = "agent_recommendations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)  # "llm:<model>" | "rules"
+    parameter: Mapped[str] = mapped_column(String(64), nullable=False)
+    proposed_value: Mapped[str] = mapped_column(String(64), nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    risk_increasing: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="proposed")
+    decided_by: Mapped[str | None] = mapped_column(String(64))
+    decided_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+
+    __table_args__ = (
+        CheckConstraint("status IN ('proposed', 'accepted', 'rejected')", name="status"),
+    )
+
+
+class AgentActivityRow(Base):
+    __tablename__ = "agent_activity"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)  # report | question | tool
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    detail: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (Index("ix_agent_activity_at", "at"),)
