@@ -142,8 +142,9 @@ def inferred_fill_dataset(
     amount: float = 1000.0,
     sample_every: timedelta = timedelta(hours=1),
 ) -> Dataset:
-    """Hypothetical offers at ``FRR * (1 + premium)``; label = public volume at >= our rate and
-    the same period within ``window`` exceeded the ask depth ahead of us plus our amount."""
+    """Hypothetical offers at ``FRR * (1 + premium)``; label = public volume of funding *taken*
+    (negative amount) at >= our rate and the same period within ``window`` exceeded the ask
+    depth ahead of us plus our amount."""
     ordered = sorted(trades, key=lambda t: t.executed_at)
     ts = [t.executed_at for t in ordered]
     kept, rows = _features_by_time(states)
@@ -168,7 +169,8 @@ def inferred_fill_dataset(
                 volume = sum(
                     abs(float(t.amount))
                     for t in future
-                    if t.period_days == period and float(t.rate) >= rate
+                    # only funding *taken* (negative amount) fills resting offers
+                    if t.amount < 0 and t.period_days == period and float(t.rate) >= rate
                 )
                 times.append(s.as_of)
                 X.append([*row, prem, float(period), math.log(amount)])

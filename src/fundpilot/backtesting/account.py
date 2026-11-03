@@ -410,7 +410,12 @@ class VirtualFundingAccount:
     def _fill_from_trades(
         self, step: int, prev: datetime, market: MarketState, result: SimulationResult
     ) -> None:
-        trades = [t for t in market.trades if prev < t.executed_at <= market.as_of]
+        trades = [
+            t
+            for t in market.trades
+            if prev < t.executed_at <= market.as_of
+            and (t.amount < 0 or self.scenario.count_lender_taker_volume)
+        ]
         if not trades:
             return
         used: dict[int, Decimal] = {}

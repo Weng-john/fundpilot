@@ -179,10 +179,27 @@ def test_deterministic_with_seed(scenario: ExecutionScenario) -> None:
 
 def test_no_lookahead_future_changes_do_not_affect_past() -> None:
     base = series(
-        200, trades_per_step=[("0.00025", "300", 2)], levels=[level("ask", "0.0002", "100")]
+        200, trades_per_step=[("0.00025", "-300", 2)], levels=[level("ask", "0.0002", "100")]
     )
     altered = base[:100] + [dataclasses.replace(s, trades=(), book=None) for s in base[100:]]
     a = FundingSimulator(AdaptiveFundingLadder(), NEUTRAL, _cfg("5000000", seed=1)).run(base)
     b = FundingSimulator(AdaptiveFundingLadder(), NEUTRAL, _cfg("5000000", seed=1)).run(altered)
     assert a.snapshots[:100] == b.snapshots[:100]
     assert a.snapshots[100:] != b.snapshots[100:]
+
+
+def test_only_funding_taken_fills_resting_offers() -> None:
+    """Docs: funding trade AMOUNT < 0 = funding taken by the taker (fills resting offers)."""
+    neutral = dataclasses.replace(
+        NEUTRAL,
+        early_repay_hazard_per_day=D(0),
+        latency_steps=0,
+        participation=D(1),
+        same_rate_queue_fraction=D(0),
+    )
+    provided = series(10, trades_per_step=[("0.0003", "500", 2)])  # lender takers only
+    taken = series(10, trades_per_step=[("0.0003", "-500", 2)])
+    assert FundingSimulator(_fixed(), neutral, _cfg()).run(provided).fills == []
+    assert FundingSimulator(_fixed(), neutral, _cfg()).run(taken).fills
+    optimistic = dataclasses.replace(neutral, count_lender_taker_volume=True)
+    assert FundingSimulator(_fixed(), optimistic, _cfg()).run(provided).fills
