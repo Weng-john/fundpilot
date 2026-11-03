@@ -23,6 +23,7 @@ src/fundpilot/
 ├── risk/                # RiskManager, limits, health blockers
 ├── execution/           # ExecutionGateway (dry_run/paper; live refused), controls, approvals
 ├── ml/                  # features, datasets (label provenance), models, walk-forward, registry
+├── api/                 # FastAPI dashboard API (read-only + token-protected emergency stop)
 ├── agents/              # analytics, reports, OpenAI-compatible client, read-only tools, recommendations
 ├── rl/                  # Gymnasium env, CEM/PPO policies, PolicyStrategy, evaluation
 ├── paper/               # live market source, health monitor, paper trading engine
@@ -38,7 +39,9 @@ src/fundpilot/
 migrations/              # Alembic revisions
 ```
 
-Planned (not yet present): `optimization/`, `apps/api`, `apps/web`.
+The dashboard UI lives in `apps/web` (React + TypeScript + Vite); its API is `fundpilot.api`.
+
+Planned (not yet present): `optimization/`.
 
 ## Data flow (Phase 1)
 
