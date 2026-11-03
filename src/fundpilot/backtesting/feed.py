@@ -64,6 +64,9 @@ class FeedConfig:
     max_staleness: timedelta = timedelta(minutes=5)
     book_precision: str = "P0"
     origins: Collection[DataOrigin] = (DataOrigin.EXCHANGE_API,)
+    # Historical order books are not available from the exchange; set False to backtest on
+    # trades + (reconstructed) FRR only. Without a book there is no queue information.
+    require_book: bool = True
     # trading pairs whose realised volatility becomes MarketState.indicators
     volatility_pairs: Mapping[str, str] = field(
         default_factory=lambda: {"btc_rv_24h": "tBTCUSD", "eth_rv_24h": "tETHUSD"}
@@ -123,12 +126,11 @@ class MarketFeed:
         book = self._books[j - 1] if j else None
         hi = bisect_right(self._trade_ts, t)
         lo = bisect_right(self._trade_ts, t - cfg.trade_lookback)
-        stale = (
-            ticker is None
-            or book is None
-            or t - ticker.observed_at > cfg.max_staleness
-            or t - book.captured_at > cfg.max_staleness
-        )
+        stale = ticker is None or t - ticker.observed_at > cfg.max_staleness
+        if cfg.require_book:
+            stale = stale or book is None or t - book.captured_at > cfg.max_staleness
+        elif book is not None and t - book.captured_at > cfg.max_staleness:
+            book = None  # never use an old book as if it were current
         indicators = {name: series.at(t) for name, series in self._volatility.items()}
         return MarketState(
             t, cfg.symbol, ticker, book, tuple(self._trades[lo:hi]), stale, indicators
