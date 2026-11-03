@@ -28,7 +28,7 @@ jobs:
     env:
       FUNDPILOT_TEST_DATABASE_URL: postgresql+psycopg://fundpilot:fundpilot@localhost:5432/fundpilot_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -50,7 +50,7 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -63,6 +63,6 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build image
         run: docker build -f docker/Dockerfile -t fundpilot:ci .
