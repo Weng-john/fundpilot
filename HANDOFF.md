@@ -163,3 +163,14 @@ Check `git log` for which parts landed.
   - reserve factor: Polygon USDT 25 %, Polygon USDC 20 %, Arbitrum 10 %
 - Compared with Bitfinex fUST trades at the same time (~5.9 % APR gross, ~5.0 % after the 15 % fee), Aave is lower. This supports the user's impression; it is one snapshot, not a time series.
 - **Next focus (user, 2026-11-04):** research OKX Simple Earn, flexible and fixed. Keep the existing Bitfinex/Aave work unchanged.
+
+## OKX Simple Earn research (2026-11-04)
+
+- The findings are in `docs/research/okx-simple-earn.md`. No code yet.
+- `www.okx.com` is not reachable; the user must allow it before an adapter can be built and verified.
+- Comparison for 2026-11-01 → 11-04 (USDT):
+  - Bitfinex 2-day trades: ~6.5 % gross, ~5.5 % net.
+  - OKX Flexible: ~4.0 % gross median, ~3.4 % net; third-party data, unverified.
+  - Aave L2s: 3.0–3.75 % net.
+- Next steps once allowed: the implementation plan in section 5 of that doc.
+- Housekeeping: removed the tracked build artefact `apps/web/tsconfig.tsbuildinfo` (now git-ignored). Nothing else was deleted.
