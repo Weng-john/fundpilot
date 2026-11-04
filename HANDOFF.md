@@ -143,3 +143,23 @@ Check `git log` for which parts landed.
   - the backtester now raises if a policy targets a market without data. Before, it silently earned 0 %.
 - Synthetic demo (low-gas chains): static 4.9 %, chaser 9.5 % (66 moves), allocator 7.6 % (22 moves). This depends on the assumed bridge cost of 5; not evidence.
 - RPC hosts still needed for the chosen chains, e.g. publicnode endpoints for Polygon/Arbitrum/Base/Optimism/Avalanche (names unverified).
+
+**2026-11-04: first live Aave read succeeded.**
+- The user allowed `polygon-bor-rpc.publicnode.com` and `arbitrum-one-rpc.publicnode.com`.
+- Command: `FUNDPILOT_AAVE_RPC_URLS='{"polygon": "...", "arbitrum": "..."}' fundpilot aave snapshot`
+- Supply APR at 18:03 UTC:
+
+  | reserve | supply APR | utilisation |
+  |---|---|---|
+  | Polygon USDT | 3.56 % | 68.9 % |
+  | Polygon USDC | 3.75 % | 68.5 % |
+  | Arbitrum USDT | 3.43 % | 87.3 % |
+  | Arbitrum USDC | 3.03 % | 84.9 % |
+
+- **Model validation:** recomputing the rates from on-chain debt, liquidity and parameters reproduces the borrow APR exactly and the supply APR to within 0.002 pp. The transcribed rate model is correct.
+- Rate parameters:
+  - all four reserves: Uopt 90 %, base 0, slope2 10 %
+  - slope1: Polygon 9 %, Arbitrum USDT 4.5 %, Arbitrum USDC 4.2 %
+  - reserve factor: Polygon USDT 25 %, Polygon USDC 20 %, Arbitrum 10 %
+- Compared with Bitfinex fUST trades at the same time (~5.9 % APR gross, ~5.0 % after the 15 % fee), Aave is lower. This supports the user's impression; it is one snapshot, not a time series.
+- **Next focus (user, 2026-11-04):** research OKX Simple Earn, flexible and fixed. Keep the existing Bitfinex/Aave work unchanged.
