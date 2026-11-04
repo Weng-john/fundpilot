@@ -96,3 +96,27 @@ Sources: docs.bitfinex.com fetched as `.md` with `curl`, plus live API calls. Fu
 - Reply to the user in Traditional Chinese.
 - Separate verified facts from inference; cite sources for time-sensitive claims.
 - Never present simulated results as real returns.
+
+## Aave V3 USDT/USDC strategy (started 2026-11-04, in progress)
+
+User request: develop an Aave DeFi strategy for **USDT and USDC**. Constraints are the same as for Bitfinex: no private keys, no live transactions, dry-run / simulation only.
+
+**Verified sources:**
+- Aave V3 contracts from `aave-dao/aave-v3-origin` (main), fetched via raw.githubusercontent.com:
+  - Interest model `DefaultReserveInterestRateStrategyV2.calculateInterestRates`: borrow rate is base + slope1·U/Uopt below the optimal point, plus slope2 above it. Supply rate = borrow rate × supply usage × (1 − reserve factor).
+  - Supply interest accrues linearly per index update (`MathUtils.calculateLinearInterest`); `SECONDS_PER_YEAR` = 365 days.
+  - `AaveProtocolDataProvider.getReserveData` returns 12 fields: totalAToken idx 2, totalVariableDebt idx 4, liquidityRate idx 5, variableBorrowRate idx 6, indexes idx 9–10, lastUpdate idx 11.
+  - `ReserveConfiguration` bit positions: reserve factor at 64, supply cap at 116, decimals at 48, active 56, frozen 57, paused 60.
+- Addresses from `bgd-labs/aave-address-book` (main): Ethereum, Arbitrum, Base, Optimism, Polygon and Avalanche. Base has USDC only.
+
+**Blocked network:** no Aave/DefiLlama/RPC host is reachable from this session. Needed hosts: any Ethereum/L2 JSON-RPC endpoint (e.g. ethereum-rpc.publicnode.com) and optionally yields.llama.fi for history. The user must allow them.
+
+**Plan / module layout:** `src/fundpilot/defi/aave/`
+- markets registry, ray/rate math, keccak + ABI helpers
+- JSON-RPC reader of the reserve state
+- table `defi_reserve_snapshots` (migration 0005)
+- cost- and impact-aware allocator: water-filling across markets with the post-deposit rate from the model, a gas/bridge cost hurdle, and utilisation/supply-cap/depeg guards
+- backtester with a withdrawal-liquidity constraint, compared against static and naive APY-chasing baselines
+- CLI `fundpilot aave ...` and `docs/aave.md`
+
+Check `git log` for which parts landed.
