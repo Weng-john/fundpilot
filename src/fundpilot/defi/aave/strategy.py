@@ -4,8 +4,10 @@
   reserve's interest-rate model (verified from the contracts), capital is allocated in chunks to
   the market with the highest *marginal* income ``(x+c)*apr(x+c) - x*apr(x)`` (water-filling).
 * **Costs.** Moving between markets costs gas on both chains and, across chains, a bridge fee.
-  A plan is adopted only if the expected income gain over ``horizon_days`` exceeds its cost plus
-  ``min_gain`` (hysteresis), otherwise current positions are kept.
+  A plan is adopted only if the expected income gain exceeds its cost plus ``min_gain``
+  (hysteresis), otherwise current positions are kept. Because spreads mean-revert, the gain is
+  the APR difference integrated over ``horizon_days`` with ``spread_half_life_days`` decay.
+  Idle wallet capital is valued the same way (conservative).
 * **Guards.** No new capital into reserves that are frozen/paused/inactive, above
   ``max_utilization`` (withdrawals may be blocked when liquidity is exhausted), or without
   supply-cap headroom. Withdrawals are limited by the reserve's available liquidity.
@@ -45,6 +47,18 @@ class AllocatorConfig:
     bridge_cost: Decimal = Decimal(5)  # fixed cost per cross-chain transfer
     min_gain: Decimal = Decimal(1)  # extra expected gain required to act
     max_share: Decimal = Decimal(1)  # max share of capital in one market
+    # Rate spreads between markets mean-revert; the expected benefit of a move is the spread
+    # integrated with this half-life over the horizon (None = assume the spread persists).
+    spread_half_life_days: Decimal | None = Decimal(3)
+
+    def effective_years(self) -> Decimal:
+        horizon = self.horizon_days
+        hl = self.spread_half_life_days
+        if hl is None or hl <= 0:
+            return horizon / Decimal(365)
+        ln2 = Decimal(2).ln()
+        decay = Decimal(1) - (-(ln2 * horizon / hl)).exp()
+        return hl / ln2 * decay / Decimal(365)
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,11 +123,16 @@ def plan(
     cfg: AllocatorConfig | None = None,
     *,
     wallet: tuple[str, Decimal] | None = None,  # (chain, idle amount) not yet supplied
+    snapshots_include_positions: bool = True,
 ) -> Plan:
     cfg = cfg or AllocatorConfig()
     snaps = {k: s for k, s in snapshots.items() if s.symbol == symbol}
     current = {k: positions.get(k, ZERO) for k in snaps}
-    base = {k: _excluding_us(s, current[k]) for k, s in snaps.items()}
+    base = (
+        {k: _excluding_us(s, current[k]) for k, s in snaps.items()}
+        if snapshots_include_positions
+        else dict(snaps)
+    )
     idle = wallet[1] if wallet else ZERO
     total = sum(current.values(), ZERO) + idle
     notes: list[str] = []
@@ -160,7 +179,7 @@ def plan(
 
     moves = _moves(current, target, wallet, base, cfg)
     cost = sum((m.cost for m in moves), ZERO)
-    years = cfg.horizon_days / Decimal(365)
+    years = cfg.effective_years()
     cur_income = income(base, current)
     tgt_income = income(base, target)
     gain = (tgt_income - cur_income) * years  # idle wallet capital earns nothing today
