@@ -174,3 +174,17 @@ Check `git log` for which parts landed.
   - Aave L2s: 3.0–3.75 % net.
 - Next steps once allowed: the implementation plan in section 5 of that doc.
 - Housekeeping: removed the tracked build artefact `apps/web/tsconfig.tsbuildinfo` (now git-ignored). Nothing else was deleted.
+
+**OKX update (2026-11-04, after `www.okx.com` was allowed):**
+- Verified against the docs: `rate` is the borrowing rate and `lendingRate` is the lenders' rate. Simple Earn Fixed has had no API since 2025-03-03.
+- Implemented `fundpilot okx summary|backfill`, `fundpilot compare-yields` and table `cex_earn_rates` (migration 0006).
+- Backfilled 90 days for USDT and USDC (2,160 h each, no gaps).
+- 30-day net yields:
+  - Bitfinex 2-day taken trades: 5.66 % mean
+  - OKX Flexible: 3.19 % (USDT), 3.62 % (USDC)
+  - Aave L2: 3.0–3.75 %
+- Details: `docs/research/okx-simple-earn.md`.
+- Possible next steps:
+  1. a venue allocator across Bitfinex, OKX Flexible and Aave, weighing lock-up/liquidity and transfer costs;
+  2. hourly OKX collection in `fundpilot collect`;
+  3. dashboard view.

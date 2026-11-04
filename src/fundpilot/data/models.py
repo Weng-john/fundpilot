@@ -526,3 +526,23 @@ class DefiReserveSnapshotRow(Base):
         CheckConstraint(f"origin IN {ORIGIN_VALUES}", name="origin"),
         Index("ix_defi_snap_key_time", "protocol", "chain", "symbol", "observed_at"),
     )
+
+
+class CexEarnRateRow(Base):
+    """Exchange earn-product rates (e.g. OKX Simple Earn Flexible), annual fractions."""
+
+    __tablename__ = "cex_earn_rates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    venue: Mapped[str] = mapped_column(String(32), nullable=False)
+    product: Mapped[str] = mapped_column(String(48), nullable=False)
+    ccy: Mapped[str] = mapped_column(String(16), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    borrow_rate: Mapped[Decimal | None] = mapped_column(ExactDecimal())
+    lending_rate: Mapped[Decimal | None] = mapped_column(ExactDecimal())
+    origin: Mapped[str] = _origin_column()
+
+    __table_args__ = (
+        UniqueConstraint("venue", "product", "ccy", "observed_at"),
+        CheckConstraint(f"origin IN {ORIGIN_VALUES}", name="origin"),
+    )

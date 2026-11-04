@@ -1,12 +1,45 @@
 # Research: OKX Simple Earn (Flexible and Fixed) for USDT/USDC
 
-Status: **research only, no code yet.** Compiled 2026-11-04. `www.okx.com`, including the API and
-the `docs-v5` reference, is **not reachable** from the development environment. Everything below
-comes from web-search summaries of OKX help pages, third-party SDKs and a third-party data
-collector.
+Status: **verified on 2026-11-04** against the official API reference
+(`https://www.okx.com/docs-v5/en/`, "Public borrow info" / "Public borrow history"), the docs change
+log (`/docs-v5/log_en/`) and live public responses. Implementation lives in
+`fundpilot.exchanges.okx`:
+- `fundpilot okx summary`
+- `fundpilot okx backfill` (table `cex_earn_rates`, migration `0006`)
+- `fundpilot compare-yields`
 
-Labels: **[OKX]** = OKX help or announcement page (via search summary) ·
-**[3rd]** = third-party source · **[inference]** = my reasoning.
+### Corrections to the first draft
+
+- **`rate` is the *borrowing* rate, and `lendingRate` is what lenders earn** (docs). The summary fields `avgRate`, `preRate` and `estRate` are all *borrowing* rates.
+- The third-party CSV quoted in the first draft recorded `rate`, so it **overstated** lender yield.
+- **Simple Earn Fixed has no API.** Its endpoints went offline on **2025-03-03**: `fixed-loan/lending-offers`, `lending-apy-history`, `lending-order` and others (docs change log). A live call to `lending-offers` returns 403. In the current docs, Fixed appears only as ledger bill types, so Fixed can only be used manually in the app or web UI.
+- History is available from 2021-12-14 (docs), at most 100 rows per page, paginated with `after`. Public endpoints allow 6 requests/s per IP.
+- Requests with some default library user agents get HTTP 403. The client sends its own UA.
+
+### Fee treatment (inference)
+
+`lendingRate / rate` had a median of **0.851 (USDT) / 0.849 (USDC)** over 2026-08-05 → 11-04. That matches the FAQ formula "× 85 %", so `lendingRate` is believed to be **net** of OKX's 15 % share. The docs do not state this explicitly.
+
+### Measured net yields, 30 days to 2026-11-04 (`fundpilot compare-yields`, % per year)
+
+| Venue | n | mean | median | p10 | p90 |
+|---|---|---|---|---|---|
+| Bitfinex fUST 2-day, taken trades, × 0.85 | 337,372 trades | 5.66 | 5.27 | 3.94 | 7.67 |
+| OKX Flexible USDT, `lendingRate` | 720 h | 3.19 | 2.93 | 2.77 | 3.84 |
+| OKX Flexible USDC, `lendingRate` | 720 h | 3.62 | 3.04 | 2.83 | 4.65 |
+| Aave V3 Polygon / Arbitrum USDT/USDC | 1 snapshot each | 3.03–3.75 | | | |
+
+Over 90 days, OKX Flexible averaged 2.98 % (USDT) and 2.93 % (USDC).
+
+The Bitfinex figure uses rates of loans that *did* execute. Our own offers would not always fill:
+the simulated 30-day ladder earned 5.3–6.0 % net depending on the execution scenario. Even so, Bitfinex
+funding paid roughly **2–2.5 percentage points more** than OKX Flexible or Aave in this window.
+OKX Flexible's advantages are instant redemption and no gas. It fits a liquidity buffer, not yield
+maximisation.
+
+---
+
+## Original research notes (first draft, partly superseded above)
 
 ## 1. Simple Earn Flexible: how it works
 

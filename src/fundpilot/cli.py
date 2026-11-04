@@ -697,6 +697,9 @@ def build_parser() -> argparse.ArgumentParser:
     from fundpilot.defi.aave.cli import add_parser as add_aave  # noqa: PLC0415
 
     add_aave(sub, _sessions)
+    from fundpilot.exchanges.okx.cli import add_parser as add_okx  # noqa: PLC0415
+
+    add_okx(sub, _sessions)
 
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser
