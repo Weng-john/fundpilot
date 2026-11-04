@@ -57,7 +57,7 @@ docker compose up -d --build       # db + migrate + collector
 More: [setup](docs/setup.md) · [architecture](docs/architecture.md) ·
 [database](docs/database.md) · [Bitfinex integration](docs/bitfinex-integration.md) ·
 [deployment](docs/deployment.md) · [security](docs/security.md) ·
-[risk management](docs/risk-management.md) · [paper trading](docs/paper-trading.md) · [AI agent](docs/agent.md) · [dashboard](docs/dashboard.md) · [Aave](docs/aave.md) · [strategy guide](docs/strategy-development.md) ·
+[risk management](docs/risk-management.md) · [paper trading](docs/paper-trading.md) · [AI agent](docs/agent.md) · [dashboard](docs/dashboard.md) · [Aave](docs/aave.md) · [yield comparison](docs/yields.md) · [strategy guide](docs/strategy-development.md) ·
 [backtesting](docs/backtesting.md) · [ML/RL guide](docs/ml-rl-guide.md)
 
 ## Design principles

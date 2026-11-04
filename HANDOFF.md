@@ -188,3 +188,13 @@ Check `git log` for which parts landed.
   1. a venue allocator across Bitfinex, OKX Flexible and Aave, weighing lock-up/liquidity and transfer costs;
   2. hourly OKX collection in `fundpilot collect`;
   3. dashboard view.
+
+## Focus change (user, 2026-11-04)
+
+- **Bitfinex currently does not accept Taiwan users.** Keep all Bitfinex code and data as is, but treat it as *reference only*; it is shown as "reference" with `available = False`. Focus on OKX Simple Earn Flexible and Aave V3 Polygon/Arbitrum.
+- **Automatic collection costs no Claude tokens.** `.github/workflows/collect-yields.yml` runs hourly on GitHub and appends CSV files to the `collected-data` branch.
+  - It only runs from `main`, so it is active after PR #9 is merged; it can also be run manually.
+  - Load the data with `fundpilot import-yields --csv-dir <dir>`.
+- **Dashboard:** new **Yields** tab (`/api/yields`), checked in a headless browser against real data.
+- Docs: `docs/yields.md`.
+- **Open checks:** after the first scheduled run, confirm that OKX does not block GitHub runner IPs and that the publicnode RPCs work from GitHub.

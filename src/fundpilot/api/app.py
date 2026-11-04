@@ -368,6 +368,23 @@ def create_app(
             ],
         }
 
+    # -- yields comparison -----------------------------------------------------------------
+    @app.get("/api/yields")
+    def yields(
+        s: DB, days: int = Query(30, ge=1, le=365), include_bitfinex: bool = True
+    ) -> dict[str, Any]:
+        from fundpilot.yields.compare import collect, summary  # noqa: PLC0415
+
+        end = utc_now()
+        series = collect(s, end - timedelta(days=days), end, include_bitfinex=include_bitfinex)
+        out = summary(series)
+        out["label"] = (
+            "RECORDED market rates (net to lenders where stated); not realised "
+            "returns of an account"
+        )
+        out["daily"] = {x.key: [{"date": d, "apr": v} for d, v in x.daily()] for x in series}
+        return out
+
     # -- agent ---------------------------------------------------------------------------
     @app.get("/api/agent")
     def agent(s: DB) -> dict[str, Any]:

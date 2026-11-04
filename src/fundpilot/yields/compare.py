@@ -162,4 +162,5 @@ def summary(series: list[VenueSeries], min_points: int = 24) -> dict[str, Any]:
         "unit": "net APR, fraction per year (simple)",
         "venues": rows,
         "best_available_by_median": None if best is None else best["key"],
+        "min_points_for_ranking": min_points,
     }

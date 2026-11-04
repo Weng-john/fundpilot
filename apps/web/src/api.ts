@@ -127,3 +127,27 @@ export const num = (x: number | string | null | undefined, digits = 2): string =
     : Number(x).toLocaleString(undefined, { maximumFractionDigits: digits });
 export const rate = (x: number | string | null | undefined): string =>
   x === null || x === undefined || x === "" ? "—" : `${(Number(x) * 100).toFixed(4)}%/d`;
+
+export type YieldVenue = {
+  key: string;
+  venue: string;
+  asset: string;
+  basis: string;
+  available: boolean;
+  note: string | null;
+  n: number;
+  mean?: number;
+  median?: number;
+  p10?: number;
+  p90?: number;
+  last?: number;
+  last_at?: string;
+};
+export type Yields = {
+  unit: string;
+  label: string;
+  venues: YieldVenue[];
+  best_available_by_median: string | null;
+  min_points_for_ranking: number;
+  daily: Record<string, { date: string; apr: number }[]>;
+};

@@ -2,9 +2,10 @@ import { useState } from "react";
 import type { Health, Overview } from "./api";
 import { Badge } from "./components/ui";
 import { useApi } from "./hooks";
+import { YieldsPage } from "./YieldsPage";
 import { AgentPage, MarketPage, OverviewPage, RiskPage, StrategyPage, type Ctx } from "./pages";
 
-const TABS = ["Overview", "Market", "Strategy", "Risk", "Agent"] as const;
+const TABS = ["Overview", "Yields", "Market", "Strategy", "Risk", "Agent"] as const;
 type Tab = (typeof TABS)[number];
 
 export function App() {
@@ -37,6 +38,7 @@ export function App() {
       {ctx.synthetic && <div className="banner">SYNTHETIC DATA INCLUDED — not market evidence.</div>}
       <main>
         {tab === "Overview" && <OverviewPage ctx={ctx} />}
+        {tab === "Yields" && <YieldsPage />}
         {tab === "Market" && <MarketPage ctx={ctx} />}
         {tab === "Strategy" && <StrategyPage ctx={ctx} />}
         {tab === "Risk" && <RiskPage ctx={ctx} writeEnabled={h?.write_api_enabled ?? false} />}

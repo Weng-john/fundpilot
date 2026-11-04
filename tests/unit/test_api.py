@@ -117,3 +117,37 @@ def test_experiments_and_path_traversal(sessions: sessionmaker[Session], tmp_pat
     assert c.get("/api/experiments/report", params={"path": "../secret.json"}).status_code == 403
     assert c.get("/api/models").json()["models"] == []
     assert c.get("/api/agent").json() == {"recommendations": [], "activity": []}
+
+
+def test_yields_endpoint(sessions: sessionmaker[Session], tmp_path: Path) -> None:
+    from decimal import Decimal  # noqa: PLC0415
+
+    from fundpilot.data.models import CexEarnRateRow  # noqa: PLC0415
+    from fundpilot.data.repository import insert_ignore  # noqa: PLC0415
+
+    now = utc_now()
+    with session_scope(sessions) as s:
+        insert_ignore(
+            s,
+            CexEarnRateRow,
+            [
+                {
+                    "venue": "okx",
+                    "product": "simple_earn_flexible",
+                    "ccy": "USDT",
+                    "observed_at": now - timedelta(hours=h),
+                    "borrow_rate": Decimal("0.04"),
+                    "lending_rate": Decimal("0.034"),
+                    "origin": "exchange_api",
+                }
+                for h in range(48)
+            ],
+        )
+    body = _client(sessions, tmp_path).get("/api/yields", params={"days": 7}).json()
+    venues = {v["key"]: v for v in body["venues"]}
+    assert venues["okx_flexible_USDT"]["n"] == 48
+    assert venues["okx_flexible_USDT"]["median"] == pytest.approx(0.034)
+    assert body["best_available_by_median"] == "okx_flexible_USDT"
+    assert body["min_points_for_ranking"] == 24
+    assert venues["bitfinex_fUST_2d"]["available"] is False
+    assert len(body["daily"]["okx_flexible_USDT"]) >= 2

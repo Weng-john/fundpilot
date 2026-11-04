@@ -46,3 +46,6 @@ code { font-size: 11px; color: var(--violet); word-break: break-all; }
 button.danger { background: #5c1d1d; color: #fff; border: 1px solid var(--red); border-radius: 6px; padding: 6px 14px; cursor: pointer; }
 footer { margin-top: 24px; color: var(--muted); font-size: 12px; }
 @media (max-width: 640px) { .controls { margin-left: 0; } .bar-row { grid-template-columns: 90px 1fr 70px; } }
+.controls-row { display: flex; gap: 16px; align-items: center; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.controls-row select { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+tr.muted td { color: var(--muted); }
