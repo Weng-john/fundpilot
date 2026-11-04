@@ -208,6 +208,8 @@ def cmd_backtest(settings: Settings, args: argparse.Namespace) -> int:
     origins = [DataOrigin.EXCHANGE_API]
     if config.allow_synthetic or args.allow_synthetic or args.synthetic_demo:
         origins.append(DataOrigin.SYNTHETIC)
+    if config.allow_reconstructed:
+        origins.append(DataOrigin.RECONSTRUCTED)
     feed_cfg = FeedConfig(
         exchange=config.exchange,
         symbol=config.symbol,
@@ -215,6 +217,9 @@ def cmd_backtest(settings: Settings, args: argparse.Namespace) -> int:
         end=config.end,
         step=config.step,
         origins=tuple(origins),
+        require_book=config.require_book,
+        max_staleness=config.max_staleness,
+        trade_lookback=config.trade_lookback,
     )
     if args.synthetic_demo:
         days = max(1, int((config.end - config.start).total_seconds() // 86_400))
@@ -524,6 +529,24 @@ def cmd_stream(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reconstruct(settings: Settings, args: argparse.Namespace) -> int:
+    from fundpilot.backtesting.reconstruct import tickers_from_funding_stats  # noqa: PLC0415
+
+    end = _parse_dt(args.end) if args.end else utc_now()
+    with _sessions(settings) as sessions, session_scope(sessions) as session:
+        n = tickers_from_funding_stats(
+            session, exchange="bitfinex", symbol=args.symbol, start=_parse_dt(args.start), end=end
+        )
+    _print(
+        {
+            "origin": "reconstructed",
+            "tickers_inserted": n,
+            "note": "FRR-only tickers rebuilt from funding statistics",
+        }
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fundpilot", description=__doc__)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -661,6 +684,22 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--book-length", type=int, default=100, choices=[1, 25, 100, 250])
     st.add_argument("--flush-every", type=float, default=60.0, help="seconds between writes")
     st.set_defaults(func=cmd_stream)
+
+    rc = sub.add_parser(
+        "reconstruct-tickers",
+        help="rebuild FRR-only tickers from funding stats (origin=reconstructed)",
+    )
+    rc.add_argument("--symbol", default="fUST")
+    rc.add_argument("--start", required=True)
+    rc.add_argument("--end", default=None)
+    rc.set_defaults(func=cmd_reconstruct)
+
+    from fundpilot.defi.aave.cli import add_parser as add_aave  # noqa: PLC0415
+
+    add_aave(sub, _sessions)
+    from fundpilot.exchanges.okx.cli import add_parser as add_okx  # noqa: PLC0415
+
+    add_okx(sub, _sessions)
 
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser

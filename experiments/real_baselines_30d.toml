@@ -1,0 +1,57 @@
+# Baseline comparison on 30 days of REAL Bitfinex fUST funding trades.
+# Historical order books/tickers are not served by the exchange, so FRR comes from
+# reconstructed tickers (`fundpilot reconstruct-tickers`, origin=reconstructed) and the
+# backtest runs without an order book (no queue information). Results are SIMULATED.
+name = "real_baselines_30d"
+exchange = "bitfinex"
+symbol = "fUST"
+start = "2026-10-05T00:00:00+00:00"
+end = "2026-11-03T00:00:00+00:00"
+step_seconds = 300
+scenarios = ["conservative", "neutral", "optimistic"]
+baseline = "frr_2d"
+seed = 11
+allow_synthetic = false
+allow_reconstructed = true
+require_book = false
+max_staleness_seconds = 7200   # funding stats are hourly
+trade_lookback_seconds = 3600  # trades kept in each market state (fills use only the last step)
+
+[simulation]
+initial_capital = "10000"
+currency = "UST"
+decision_interval_seconds = 900
+operating_cost_per_day = "0"
+
+[[strategies]]
+id = "frr_2d"
+type = "frr"
+period_days = 2
+
+[[strategies]]
+id = "auto_renew_frr"
+type = "auto_renew"
+period_days = 2
+
+[[strategies]]
+id = "fixed_0.00015_2d"
+type = "fixed_rate"
+rate = "0.00015"
+period_days = 2
+
+[[strategies]]
+id = "fixed_0.00020_2d"
+type = "fixed_rate"
+rate = "0.00020"
+period_days = 2
+
+[[strategies]]
+id = "fixed_0.00025_120d"
+type = "fixed_rate"
+rate = "0.00025"
+period_days = 120
+
+[[strategies]]
+id = "ladder"
+type = "adaptive_ladder"
+tilt = "0.8"

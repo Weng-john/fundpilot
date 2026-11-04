@@ -124,7 +124,7 @@ def generate(
                     symbol=cfg.symbol,
                     trade_id=trade_id,
                     executed_at=t + offset,
-                    amount=_d(rng.expovariate(1 / 20_000), 2),
+                    amount=_d(rng.expovariate(1 / 20_000) * (-1 if rng.random() < 0.6 else 1), 2),
                     rate=_d(rate * rng.uniform(0.97, 1.08)),
                     period_days=rng.choice(_PERIODS),
                     origin=DataOrigin.SYNTHETIC,

@@ -32,7 +32,11 @@ class OrderBookAwareStrategy:
         return f"orderbook_aware({self.period_days}d,depth={self.depth_ahead})"
 
     def target_rate(self, market: MarketState) -> Decimal | None:
-        asks = sorted(market.levels(BookSide.ASK), key=lambda lv: lv.rate)
+        # competing supply: offers we would actually queue behind (same or shorter period)
+        asks = sorted(
+            (lv for lv in market.levels(BookSide.ASK) if lv.period_days <= self.period_days),
+            key=lambda lv: lv.rate,
+        )
         if not asks:
             return None
         cumulative = Decimal(0)
@@ -43,7 +47,10 @@ class OrderBookAwareStrategy:
                 chosen = level.rate
                 break
         rate = chosen - self.undercut
-        best_bid = market.best_bid()
+        # Only borrower bids whose requested period fits our offer can match it. Real books
+        # often show long-period bids above short-period asks (observed 2026-11-03 on fUST).
+        bids = [lv for lv in market.levels(BookSide.BID) if lv.period_days <= self.period_days]
+        best_bid = max(bids, key=lambda lv: lv.rate) if bids else None
         if best_bid is not None and best_bid.rate >= rate:
             rate = best_bid.rate
         return max(rate, self.min_rate)

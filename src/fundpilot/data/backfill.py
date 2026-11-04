@@ -141,7 +141,7 @@ def backfill_trades(
     start: datetime,
     end: datetime,
     *,
-    page_limit: int = 1000,
+    page_limit: int = 10_000,  # documented max for trades/candles,
 ) -> BackfillReport:
     report = BackfillReport("funding_trades", symbol)
     pages = paginate_backward(
@@ -165,7 +165,7 @@ def backfill_candles(
     start: datetime,
     end: datetime,
     *,
-    page_limit: int = 1000,
+    page_limit: int = 10_000,  # documented max for trades/candles,
 ) -> BackfillReport:
     report = BackfillReport(f"funding_candles:{timeframe}", symbol)
     pages = paginate_backward(
@@ -189,7 +189,7 @@ def backfill_trading_candles(
     end: datetime,
     *,
     timeframe: str = "1h",
-    page_limit: int = 1000,
+    page_limit: int = 10_000,  # documented max for trades/candles,
 ) -> BackfillReport:
     """Trading-pair candles (e.g. ``tBTCUSD``) for volatility indicators."""
     fetch = adapter.get_trading_candles  # type: ignore[attr-defined]

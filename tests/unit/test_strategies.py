@@ -116,6 +116,16 @@ def test_orderbook_depth_and_bid_cross() -> None:
     assert s.decide(state(FIXED_NOW), _pf()).is_empty  # no asks -> no decision
 
 
+def test_orderbook_ignores_bids_and_asks_for_other_periods() -> None:
+    s = OrderBookAwareStrategy(period_days=2, depth_ahead=D(1000), undercut=D("0.00000001"))
+    levels = [
+        level("ask", "0.00016", "2000", 2),
+        level("ask", "0.00010", "9000", 30),
+        level("bid", "0.00025", "100000", 30),
+    ]  # long-period bid above short asks
+    assert s.target_rate(state(FIXED_NOW, levels=levels)) == D("0.00015999")
+
+
 def test_orderbook_reprices_only_old_offers() -> None:
     s = OrderBookAwareStrategy(depth_ahead=D(1))
     levels = [level("ask", "0.0002", "10")]

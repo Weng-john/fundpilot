@@ -11,8 +11,11 @@ Message formats follow the official ``bitfinex-api-py`` 4.0.0 SDK:
   ``[chanId, "fte"|"ftu", row]``;
 * ``[chanId, "cs", checksum]`` book checksums (ignored here).
 
-UNVERIFIED (not in the SDK): a book update with ``COUNT == 0`` removes the level; info codes
-20060/20061 announce maintenance start/end.
+Verified in docs.bitfinex.com (ws-general, ws-public-books; checked 2026-11-03): a book update
+with ``COUNT == 0`` deletes the level (funding: ``AMOUNT == 1`` from asks, ``-1`` from bids);
+info 20060/20061 announce maintenance start/end and channels should be re-subscribed after
+20061; the first info message carries ``platform.status`` (1 operative, 0 maintenance);
+heartbeats every 15 s; at most 20 connections/min to api-pub.
 """
 
 from __future__ import annotations
@@ -37,8 +40,8 @@ logger = logging.getLogger(__name__)
 
 PUBLIC_WS_URL = "wss://api-pub.bitfinex.com/ws/2"
 INFO_RECONNECT = 20051
-INFO_MAINTENANCE_START = 20060  # unverified
-INFO_MAINTENANCE_END = 20061  # unverified
+INFO_MAINTENANCE_START = 20060
+INFO_MAINTENANCE_END = 20061
 
 
 class ReconnectRequested(Exception):
@@ -87,8 +90,12 @@ class FundingStreamState:
                 self.maintenance = True
             elif code == INFO_MAINTENANCE_END:
                 self.maintenance = False
+                raise ReconnectRequested("maintenance ended (20061): re-subscribe")
             if "version" in msg and msg["version"] != 2:
                 raise RuntimeError(f"unsupported websocket API version {msg['version']}")
+            platform = msg.get("platform")
+            if isinstance(platform, dict) and "status" in platform:
+                self.maintenance = platform["status"] != 1
         elif event == "error":
             logger.error("websocket error event: %s", msg)
 
@@ -196,6 +203,8 @@ class BitfinexFundingStream:
     silence_timeout: float = 30.0
     backoff_base: float = 1.0
     backoff_cap: float = 60.0
+    # docs: no more than 20 connections/min to api-pub -> keep >= 3 s between connects
+    min_reconnect_interval: float = 3.0
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     rng: random.Random = field(default_factory=random.Random)
     reconnects: int = 0
@@ -235,6 +244,7 @@ class BitfinexFundingStream:
                     return
             except ReconnectRequested as exc:
                 logger.warning("reconnecting: %s", exc)
+                await self.sleep(self.min_reconnect_interval)
             except Exception as exc:  # network errors etc.: back off and reconnect
                 logger.warning("websocket failure: %s", exc)
                 delay = min(self.backoff_cap, self.backoff_base * 2**attempt)

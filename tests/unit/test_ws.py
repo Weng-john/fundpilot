@@ -100,7 +100,12 @@ def test_info_events() -> None:
     st = FundingStreamState("fUST")
     st.handle(json.dumps({"event": "info", "code": 20060}))
     assert st.maintenance
-    st.handle(json.dumps({"event": "info", "code": 20061}))
+    with pytest.raises(ReconnectRequested):  # docs: re-subscribe after maintenance
+        st.handle(json.dumps({"event": "info", "code": 20061}))
+    assert not st.maintenance
+    st.handle(json.dumps({"event": "info", "version": 2, "platform": {"status": 0}}))
+    assert st.maintenance and st.market_state().stale
+    st.handle(json.dumps({"event": "info", "version": 2, "platform": {"status": 1}}))
     assert not st.maintenance
     with pytest.raises(ReconnectRequested):
         st.handle(json.dumps({"event": "info", "code": 20051}))
@@ -161,7 +166,9 @@ def test_stream_reconnects_and_resubscribes() -> None:
         await stream.run(asyncio.Event(), max_connections=3)
 
     asyncio.run(main())
-    assert len(sleeps) == 1  # back-off only after the failed connect
+    # back-off after the failed connect; >= 3 s pause before each requested/silent reconnect
+    # (docs: at most 20 connections per minute to api-pub)
+    assert len(sleeps) == 3 and sleeps[1:] == [3.0, 3.0]
     assert stream.reconnects == 3
     assert all(len(c.sent) == 3 for c in made)  # resubscribed each time
     channels = [s["channel"] for s in made[0].sent]

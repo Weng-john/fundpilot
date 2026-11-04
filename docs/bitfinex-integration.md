@@ -1,18 +1,16 @@
 # Bitfinex API integration guide
 
-## Verification status — read first
+## Verification status
 
-This adapter was written in an environment where `docs.bitfinex.com`,
-`support.bitfinex.com` and `api-pub.bitfinex.com` were **not reachable**. No live
-API call has been made. Everything below is classified as:
+Verified on **2026-11-03** against the official documentation (fetched as Markdown from
+`docs.bitfinex.com/...md`) and live public API responses. Tags:
 
 | Tag | Meaning |
 |---|---|
-| **SDK** | Taken from the official `bitfinex-api-py` 4.0.0 source (`bfxapi/types/serializers.py`, `bfxapi/rest/_interfaces/*`, `bfxapi/_client.py`), published by Bitfinex on PyPI. Second-hand but authored by Bitfinex. |
-| **Search** | Seen in web-search summaries of official Bitfinex docs / support pages; page not read directly. |
-| **Unverified** | Recalled or inferred; must be confirmed before research or live use. |
-
-Open an *Exchange API verification* issue to promote anything to verified.
+| **Docs** | Stated on an official docs.bitfinex.com page (URL given) |
+| **Live** | Confirmed with a real `api-pub.bitfinex.com` response |
+| **SDK** | Official `bitfinex-api-py` 4.0.0 source |
+| **Search** | Only seen in web-search summaries of support.bitfinex.com (not reachable here) |
 
 ## Hosts
 
@@ -54,28 +52,36 @@ The stream reconnects with exponential back-off, treats 30 s of silence as a dea
 clears book state on reconnect and re-subscribes. `fundpilot stream` persists trades continuously
 and ticker/book snapshots every `--flush-every` seconds.
 
-## Assumptions that need verification
+## Assumptions and their status
 
-| # | Assumption | Where it is used | Status |
+| # | Statement | Status | Source |
 |---|---|---|---|
-| A1 | Tether USDt funding symbol is `fUST` | default `FUNDPILOT_SYMBOLS` | Unverified |
-| A2 | Book/ticker/trade/candle rates are daily decimal fractions | `parsers.py` (no scaling) | Unverified |
-| A3 | Funding-stats `FRR` is reported as FRR/365; multiply by 365 for daily | `FUNDPILOT_BITFINEX_FUNDING_STATS_FRR_SCALE` (raw value always stored in `frr_raw`) | Unverified |
-| A4 | Funding book: `AMOUNT > 0` = lender offer (ask), `< 0` = borrower bid | `BookSide` mapping | Unverified |
-| A5 | Funding trade `AMOUNT` sign semantics | stored signed, not interpreted | Unverified |
-| A6 | Funding candle key `trade:{tf}:{fSYM}:a30:p2:p30` (aggregate) or `:p{N}` | `FUNDPILOT_BITFINEX_CANDLE_PERIOD_SPEC` | Unverified |
-| A7 | Candle timeframes `1m 5m 15m 30m 1h 3h 6h 12h 1D 1W 14D 1M` | `symbols.CANDLE_TIMEFRAMES` | Unverified |
-| A8 | Rate limit 10–90 req/min per endpoint; exceeding blocks the IP for 60 s; JSON error `ERR_RATE_LIMIT` | `TokenBucket` default 15/min, 60 s cooldown | Search ([requirements & limitations](https://docs.bitfinex.com/docs/requirements-and-limitations)) |
-| A9 | Rate-limit error code `11010` | client detects code *or* "ratelimit" in message | Unverified |
-| A10 | Error codes 10000/10001/10020/10100 | non-retryable mapping | SDK |
-| A11 | Page-size maxima (stats 250, trades/candles ≥ 1000) | backfill `page_limit` defaults | Unverified |
-| A12 | Funding period range 2–120 days | quality checks | Search ([What is Margin Funding](https://support.bitfinex.com/hc/en-us/articles/214441185-What-is-Margin-Funding)) |
-| A13 | Minimum offer USD 150 equivalent | (Phase 3+ strategy constraints) | Search (same) |
-| A14 | Lender fee 15 % of interest, 18 % for hidden offers | (Phase 2 fee model) | Search ([fees](https://support.bitfinex.com/hc/en-us/articles/213919589-What-fees-do-you-charge-)) |
-| A16 | USDt/USD trading pair code `tUSTUSD` (depeg check) and `tBTCUSD`/`tETHUSD` (volatility) | paper config, `FUNDPILOT_VOLATILITY_PAIRS` | Unverified |
-| A15 | Interest is calculated to the second | `accrued_interest` | Search ([interest calc](https://support.bitfinex.com/hc/en-us/articles/213918989-How-is-Funding-interest-calculated-on-Bitfinex)) |
+| A1 | `UST` is Tether USDt and a margin-funding currency (`fUST`) | **Verified** | Live: `conf/pub:map:currency:label` → `UST: "Tether USDt"`; `conf/pub:list:currency:margin` contains `UST` |
+| A2 | Ticker/book/trade/candle rates are daily decimal fractions | **Verified** | Live: ticker FRR 0.00025254 ≈ funding-stats FRR 6.9e-7 × 365 |
+| A3 | Funding-stats FRR = FRR/365 (× 365 for daily) | **Verified** | Docs [funding stats](https://docs.bitfinex.com/reference/rest-public-funding-stats) + Live |
+| A4 | Funding book `AMOUNT > 0` = ask (offer), else bid | **Verified** | Docs [book](https://docs.bitfinex.com/reference/rest-public-book) |
+| A5 | Funding trade `AMOUNT` > 0 = funding *provided* by the taker, < 0 = funding *taken* | **Verified** | Docs [ws trades](https://docs.bitfinex.com/reference/ws-public-trades). The simulator now lets only taken funding fill resting offers (optimistic scenario excepted) |
+| A6 | Funding candle keys `:pN` or aggregate `:a30:p2:p30` (UI-equivalent) | **Verified** | Docs [candles](https://docs.bitfinex.com/reference/rest-public-candles) + Live |
+| A7 | Timeframes 1m 5m 15m 30m 1h 3h 6h 12h 1D 1W 14D 1M | **Verified** | Docs candles |
+| A8 | Rate limits per endpoint; 60 s IP block; body `{"error": "ERR_RATE_LIMIT"}` | **Verified** | Docs [requirements](https://docs.bitfinex.com/docs/requirements-and-limitations): ticker 90, book 240, candles 30, trades 15, platform/status 30 req/min; funding stats unpublished (10/min used). Client fixed to detect the object form |
+| A9 | Rate-limit error code 11010 | Not documented | kept only as an extra defensive check |
+| A10 | `["error", code, msg]` for other errors | **Verified** | Live: `ticker/fXYZ` → `["error",10020,"symbol: invalid"]` |
+| A11 | Page sizes: trades/candles ≤ 10000, funding stats ≤ 250 | **Verified** | Docs trades, candles, funding stats |
+| A12 | Funding period 2–120 days | Search | support.bitfinex.com not reachable from the dev environment |
+| A13 | Minimum offer USD 150 equivalent | Search | same |
+| A14 | Lender fee 15 % (18 % hidden) | Search | same |
+| A15 | Interest accrues per second | Search | same |
+| A16 | Pairs `tUSTUSD`, `tBTCUSD`, `tETHUSD` | **Verified** | Live ticker / candles |
+| WS | `count = 0` deletes a level; info 20051/20060/20061; platform status flag; heartbeat 15 s; ≤ 20 connections/min (api-pub); ≤ 30 subscriptions/connection | **Verified** | Docs [ws general](https://docs.bitfinex.com/docs/ws-general), [ws books](https://docs.bitfinex.com/reference/ws-public-books), requirements |
 
-### How to verify (once the hosts are reachable)
+Additional documented fields: funding ticker index 16 `FIRST_TRADE`; trading ticker index 10
+`FIRST_TRADE` (parsers accept the extra fields).
+
+Observed on live data (2026-11-03, informational): long-period borrower bids at the FRR often
+sit above short-period lender asks, so a "crossed" top of book across periods is normal. The
+order-book-aware strategy now only compares bids/asks whose period fits its own.
+
+### How to re-verify
 
 1. `curl https://api-pub.bitfinex.com/v2/ticker/fUST` — confirm A1/A2 and the 16-field layout.
 2. Compare `funding/stats/fUST/hist?limit=1` FRR × 365 with the ticker FRR (A3).

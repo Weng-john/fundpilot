@@ -123,6 +123,10 @@ class ExperimentConfig:
     baseline: str
     simulation: SimulationConfig
     allow_synthetic: bool = False
+    allow_reconstructed: bool = False
+    require_book: bool = True
+    max_staleness: timedelta = timedelta(minutes=5)
+    trade_lookback: timedelta = timedelta(hours=24)
 
     @classmethod
     def from_toml(cls, path: Path) -> ExperimentConfig:
@@ -161,6 +165,10 @@ class ExperimentConfig:
                 operating_cost_per_day=Decimal(str(sim.get("operating_cost_per_day", "0"))),
             ),
             allow_synthetic=bool(raw.get("allow_synthetic", False)),
+            allow_reconstructed=bool(raw.get("allow_reconstructed", False)),
+            require_book=bool(raw.get("require_book", True)),
+            max_staleness=timedelta(seconds=int(raw.get("max_staleness_seconds", 300))),
+            trade_lookback=timedelta(seconds=int(raw.get("trade_lookback_seconds", 86_400))),
         )
 
 
@@ -264,6 +272,12 @@ def _pct(x: Decimal) -> str:
 
 
 def _banner(label: str) -> str:
+    if label == "RECONSTRUCTED":
+        return (
+            "SIMULATED results on recorded exchange trades with RECONSTRUCTED inputs "
+            "(hourly FRR from funding statistics; no historical order book, so no queue "
+            "information). Assumed execution scenarios; not realised returns."
+        )
     if label == "exchange_api":
         return (
             "SIMULATED results on recorded exchange data under assumed execution "
@@ -288,7 +302,12 @@ def run_experiment(
         raise ValueError("feed has fewer than two market states; is there data in the window?")
     if all(s.stale for s in states):
         raise ValueError("every market state is stale; no usable observations in the window")
-    synthetic = any(o != "exchange_api" for o in provenance.origins)
+    if "synthetic" in provenance.origins:
+        label = "SYNTHETIC"
+    elif "reconstructed" in provenance.origins:
+        label = "RECONSTRUCTED"
+    else:
+        label = "exchange_api"
     runs: list[RunOutcome] = []
     for scenario in config.scenarios:
         metrics_by_id: dict[str, tuple[str, Metrics, int]] = {}
@@ -308,9 +327,7 @@ def run_experiment(
             name, metrics, rejections = metrics_by_id[spec.id]
             excess = None if spec.id == config.baseline else excess_return(metrics, base)
             runs.append(RunOutcome(spec.id, name, scenario.name, metrics, excess, rejections))
-    return ExperimentReport(
-        config, provenance, "SYNTHETIC" if synthetic else "exchange_api", tuple(runs), now
-    )
+    return ExperimentReport(config, provenance, label, tuple(runs), now)
 
 
 def write_report(report: ExperimentReport, directory: Path) -> tuple[Path, Path]:

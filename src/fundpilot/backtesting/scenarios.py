@@ -33,6 +33,10 @@ class ExecutionScenario:
     early_repay_hazard_per_day: Decimal
     # Decision-to-live latency in simulation steps.
     latency_steps: int = 1
+    # Funding trade AMOUNT is positive when the taker *provided* funding (hit a borrower bid) and
+    # negative when the taker *took* funding (docs: ws-public-trades). Only taken funding can fill
+    # a resting lender offer; counting provided-funding volume too is an optimistic assumption.
+    count_lender_taker_volume: bool = False
 
     def __post_init__(self) -> None:
         for name in ("same_rate_queue_fraction", "participation", "bid_cross_fraction"):
@@ -74,6 +78,7 @@ OPTIMISTIC = ExecutionScenario(
     bid_cross_fraction=Decimal(1),
     early_repay_hazard_per_day=Decimal("0.1"),
     latency_steps=0,
+    count_lender_taker_volume=True,
 )
 
 PRESETS: dict[str, ExecutionScenario] = {s.name: s for s in (CONSERVATIVE, NEUTRAL, OPTIMISTIC)}

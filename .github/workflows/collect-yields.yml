@@ -1,0 +1,51 @@
+# Hourly collection of public lending yields (OKX Simple Earn Flexible + Aave V3 on
+# Polygon/Arbitrum) into CSV files on the `collected-data` branch.
+# Runs on GitHub's servers: it uses no Claude tokens and no exchange credentials.
+# Scheduled workflows only run from the default branch, so this starts after merge to main.
+name: Collect yields
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect-yields
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FUNDPILOT_AAVE_RPC_URLS: '{"polygon": "https://polygon-bor-rpc.publicnode.com", "arbitrum": "https://arbitrum-one-rpc.publicnode.com"}'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: uv sync --frozen --no-dev
+      - name: Check out data branch
+        run: |
+          git config user.name "fundpilot-collector"
+          git config user.email "fundpilot-collector@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin collected-data >/dev/null; then
+            git fetch --depth=1 origin collected-data
+            git worktree add data FETCH_HEAD
+            git -C data switch -c collected-data
+          else
+            git worktree add --orphan -b collected-data data
+          fi
+      - name: Collect
+        run: uv run fundpilot collect-yields --csv-dir data/yields --okx-hours 48
+      - name: Commit and push
+        run: |
+          cd data
+          git add yields
+          if git diff --cached --quiet; then echo "no new rows"; exit 0; fi
+          git commit -q -m "data: yields $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push origin collected-data
