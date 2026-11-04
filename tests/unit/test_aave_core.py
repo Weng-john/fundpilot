@@ -200,9 +200,17 @@ def test_allocator_respects_costs_and_hysteresis() -> None:
         "USDT",
         snaps,
         {"ethereum:USDT": D(100_000)},
-        AllocatorConfig(chunk=D(5000), horizon_days=D(30)),
+        AllocatorConfig(chunk=D(5000), horizon_days=D(30), spread_half_life_days=None),
     )
     assert large.adopted and large.target["arbitrum:USDT"] > 0
+    # with mean-reverting spreads (default 3-day half-life) the same move is not worth it
+    decaying = plan(
+        "USDT",
+        snaps,
+        {"ethereum:USDT": D(100_000)},
+        AllocatorConfig(chunk=D(5000), horizon_days=D(30)),
+    )
+    assert not decaying.adopted and decaying.expected_gain < large.expected_gain
     assert all(m.cost > 0 for m in large.moves)
 
 

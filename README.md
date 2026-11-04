@@ -24,6 +24,7 @@ FundPilot does **not** assume the answer is yes.
 | 5 Reinforcement learning | Gymnasium env on the shared account model with the risk gate, CEM + PPO, out-of-sample comparison with baselines, exploitation tests | ✅ implemented; no real-data evaluation yet |
 | 6 AI agent | deterministic daily/weekly reports, anomaly detection, read-only tool-calling Q&A via any OpenAI-compatible API, validated human-reviewed recommendations | ✅ implemented; works without an LLM |
 | Dashboard | FastAPI read-only API + React/TypeScript/Vite UI: overview, market analytics, strategy/ML/RL results, risk monitoring, agent | ✅ implemented |
+| Aave V3 USDT/USDC | read-only reserve reader (JSON-RPC), verified rate model, impact- and cost-aware allocator, backtester vs static/APY-chasing baselines, `fundpilot aave` CLI | ✅ implemented; no live Aave data yet (RPC hosts not reachable from dev env) |
 | 7 Live funding | authenticated adapter, live execution | **not started — requires explicit human approval** |
 
 **Important limitations**
@@ -56,7 +57,7 @@ docker compose up -d --build       # db + migrate + collector
 More: [setup](docs/setup.md) · [architecture](docs/architecture.md) ·
 [database](docs/database.md) · [Bitfinex integration](docs/bitfinex-integration.md) ·
 [deployment](docs/deployment.md) · [security](docs/security.md) ·
-[risk management](docs/risk-management.md) · [paper trading](docs/paper-trading.md) · [AI agent](docs/agent.md) · [dashboard](docs/dashboard.md) · [strategy guide](docs/strategy-development.md) ·
+[risk management](docs/risk-management.md) · [paper trading](docs/paper-trading.md) · [AI agent](docs/agent.md) · [dashboard](docs/dashboard.md) · [Aave](docs/aave.md) · [strategy guide](docs/strategy-development.md) ·
 [backtesting](docs/backtesting.md) · [ML/RL guide](docs/ml-rl-guide.md)
 
 ## Design principles

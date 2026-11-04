@@ -120,3 +120,17 @@ User request: develop an Aave DeFi strategy for **USDT and USDC**. Constraints a
 - CLI `fundpilot aave ...` and `docs/aave.md`
 
 Check `git log` for which parts landed.
+
+**Status 2026-11-04: implemented and tested.** Full suite: 257 tests pass, including PostgreSQL. Docs: `docs/aave.md`.
+- Commands: `fundpilot aave markets | snapshot | plan | backtest`.
+- Configs: `experiments/aave_usdt.toml` and `experiments/aave_usdc.toml`.
+- Migration `0005`: `defi_reserve_snapshots`.
+
+**Not done yet:**
+1. Live reads. The user must allow at least one JSON-RPC host per chain. Then set `FUNDPILOT_AAVE_RPC_URLS` and run `fundpilot aave snapshot` hourly (cron or a loop) to build history.
+2. Historical backfill. The DefiLlama yields API (`yields.llama.fi/chart/<pool>`) could seed history if allowed; its response shape is unverified, so verify it before writing a parser.
+3. Real-data backtest of the allocator against the baselines, once snapshots exist.
+4. USDT↔USDC rotation (swap cost + depeg guard), which is not implemented.
+5. Optional: wire Aave snapshots into the dashboard and agent analytics.
+
+**Synthetic-demo observation** (not evidence): the naive APY chaser loses heavily to gas/bridge costs on small capital. The 92 % utilisation guard costs yield on synthetic data, because withdrawal lock-ups rarely bind there. Do not tune on synthetic data.

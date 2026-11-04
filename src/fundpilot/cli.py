@@ -694,6 +694,10 @@ def build_parser() -> argparse.ArgumentParser:
     rc.add_argument("--end", default=None)
     rc.set_defaults(func=cmd_reconstruct)
 
+    from fundpilot.defi.aave.cli import add_parser as add_aave  # noqa: PLC0415
+
+    add_aave(sub, _sessions)
+
     sub.add_parser("status", help="show configuration and row counts").set_defaults(func=cmd_status)
     return parser
 

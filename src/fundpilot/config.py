@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_api_key: SecretStr | None = None
 
+    # -- DeFi (read-only) --------------------------------------------------
+    # JSON object {chain: rpc_url}, e.g. {"ethereum": "https://ethereum-rpc.publicnode.com"}.
+    # Only eth_call / eth_blockNumber are used; no keys, no transactions.
+    aave_rpc_urls: dict[str, str] = Field(default_factory=dict)
+
     # -- dashboard API --------------------------------------------------
     # Write endpoints (only "emergency stop") are disabled unless a token is set.
     api_token: SecretStr | None = None

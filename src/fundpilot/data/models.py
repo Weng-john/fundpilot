@@ -492,3 +492,37 @@ class TradingCandleRow(Base):
         UniqueConstraint("exchange", "symbol", "timeframe", "open_time"),
         CheckConstraint(f"origin IN {ORIGIN_VALUES}", name="origin"),
     )
+
+
+class DefiReserveSnapshotRow(Base):
+    """Lending-protocol reserve state (e.g. Aave V3 USDT/USDC), amounts in token units."""
+
+    __tablename__ = "defi_reserve_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    protocol: Mapped[str] = mapped_column(String(32), nullable=False)
+    chain: Mapped[str] = mapped_column(String(32), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(16), nullable=False)
+    underlying: Mapped[str] = mapped_column(String(42), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    total_supplied: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    total_debt: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    available_liquidity: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    supply_apr: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    borrow_apr: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    reserve_factor: Mapped[Decimal] = mapped_column(ExactDecimal(), nullable=False)
+    supply_cap: Mapped[Decimal | None] = mapped_column(ExactDecimal())
+    optimal_usage: Mapped[Decimal | None] = mapped_column(ExactDecimal())
+    base_rate: Mapped[Decimal | None] = mapped_column(ExactDecimal())
+    slope1: Mapped[Decimal | None] = mapped_column(ExactDecimal())
+    slope2: Mapped[Decimal | None] = mapped_column(ExactDecimal())
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    is_frozen: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    is_paused: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    origin: Mapped[str] = _origin_column()
+
+    __table_args__ = (
+        UniqueConstraint("protocol", "chain", "symbol", "observed_at"),
+        CheckConstraint(f"origin IN {ORIGIN_VALUES}", name="origin"),
+        Index("ix_defi_snap_key_time", "protocol", "chain", "symbol", "observed_at"),
+    )

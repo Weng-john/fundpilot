@@ -1,0 +1,36 @@
+# Aave V3 USDC supply strategy backtest. Results are SIMULATED.
+# Real data: collect snapshots first (`fundpilot aave snapshot`, e.g. hourly via cron).
+name = "aave_usdc"
+symbol = "USDC"
+capital = "100000"
+start_chain = "ethereum"
+start = "2026-01-01T00:00:00+00:00"
+end = "2026-04-01T00:00:00+00:00"
+step_seconds = 3600
+rebalance_every = 24          # evaluate once a day
+horizon_days = 30
+spread_half_life_days = 3     # 0 = assume rate spreads persist
+max_utilization = "0.92"      # do not add to reserves above this utilisation
+min_gain = 5                  # required expected gain after costs (token units)
+withdrawal_liquidity = "observed"
+seed = 7
+
+[costs]
+bridge = 5
+[costs.tx]                    # per supply/withdraw transaction, ~USD (assumptions; update)
+ethereum = 8
+arbitrum = 0.3
+base = 0.2
+optimism = 0.2
+polygon = 0.1
+avalanche = 0.3
+
+[[policies]]
+type = "static"
+chain = "ethereum"
+
+[[policies]]
+type = "chaser"
+
+[[policies]]
+type = "allocator"
