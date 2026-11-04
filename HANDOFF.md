@@ -198,3 +198,8 @@ Check `git log` for which parts landed.
 - **Dashboard:** new **Yields** tab (`/api/yields`), checked in a headless browser against real data.
 - Docs: `docs/yields.md`.
 - **Open checks:** after the first scheduled run, confirm that OKX does not block GitHub runner IPs and that the publicnode RPCs work from GitHub.
+
+**2026-11-04: PR #9 merged; automatic collection is live.**
+- The first manual run of *Collect yields* succeeded (Actions run 41888169541). OKX is reachable from GitHub runners, and the publicnode RPCs work.
+- Data lives on the `collected-data` branch (`yields/*.csv`). It is scheduled hourly at :23 UTC.
+- To use the data: `git fetch origin collected-data && git worktree add ../fundpilot-data origin/collected-data && uv run fundpilot import-yields --csv-dir ../fundpilot-data/yields`.
