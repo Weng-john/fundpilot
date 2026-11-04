@@ -7,7 +7,7 @@
   A plan is adopted only if the expected income gain exceeds its cost plus ``min_gain``
   (hysteresis), otherwise current positions are kept. Because spreads mean-revert, the gain is
   the APR difference integrated over ``horizon_days`` with ``spread_half_life_days`` decay.
-  Idle wallet capital is valued the same way (conservative).
+  Idle wallet capital earns nothing, so deploying it counts over the full horizon.
 * **Guards.** No new capital into reserves that are frozen/paused/inactive, above
   ``max_utilization`` (withdrawals may be blocked when liquidity is exhausted), or without
   supply-cap headroom. Withdrawals are limited by the reserve's available liquidity.
@@ -25,6 +25,8 @@ from decimal import Decimal
 from fundpilot.defi.aave.models import ReserveSnapshot
 
 ZERO = Decimal(0)
+# Chains with low transaction costs (user preference 2026-11-04: Ethereum mainnet excluded).
+LOW_GAS_CHAINS: tuple[str, ...] = ("polygon", "arbitrum", "base", "optimism", "avalanche")
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +49,8 @@ class AllocatorConfig:
     bridge_cost: Decimal = Decimal(5)  # fixed cost per cross-chain transfer
     min_gain: Decimal = Decimal(1)  # extra expected gain required to act
     max_share: Decimal = Decimal(1)  # max share of capital in one market
+    # chains the allocator may use (None = all). Low-gas default: Ethereum mainnet excluded.
+    allowed_chains: tuple[str, ...] | None = LOW_GAS_CHAINS
     # Rate spreads between markets mean-revert; the expected benefit of a move is the spread
     # integrated with this half-life over the horizon (None = assume the spread persists).
     spread_half_life_days: Decimal | None = Decimal(3)
@@ -103,6 +107,9 @@ def income(base: Mapping[str, ReserveSnapshot], alloc: Mapping[str, Decimal]) ->
 
 
 def _chain(key: str) -> str:
+    """Chain of a market key ``chain:SYMBOL`` or a wallet key ``wallet:chain``."""
+    if key.startswith("wallet:"):
+        return key.removeprefix("wallet:")
     return key.split(":", 1)[0]
 
 
@@ -126,7 +133,11 @@ def plan(
     snapshots_include_positions: bool = True,
 ) -> Plan:
     cfg = cfg or AllocatorConfig()
-    snaps = {k: s for k, s in snapshots.items() if s.symbol == symbol}
+    snaps = {
+        k: s
+        for k, s in snapshots.items()
+        if s.symbol == symbol and (cfg.allowed_chains is None or s.chain in cfg.allowed_chains)
+    }
     current = {k: positions.get(k, ZERO) for k in snaps}
     base = (
         {k: _excluding_us(s, current[k]) for k, s in snaps.items()}
@@ -182,7 +193,13 @@ def plan(
     years = cfg.effective_years()
     cur_income = income(base, current)
     tgt_income = income(base, target)
-    gain = (tgt_income - cur_income) * years  # idle wallet capital earns nothing today
+    # Idle capital earns 0 % today; putting it to work is a persistent gain (full horizon).
+    # Only the re-allocation spread on already-invested capital is assumed to mean-revert.
+    avg_target_apr = tgt_income / total if total else ZERO
+    idle_part = idle * avg_target_apr
+    gain = (
+        idle_part * cfg.horizon_days / Decimal(365) + (tgt_income - cur_income - idle_part) * years
+    )
     adopted = bool(moves) and (gain - cost) > cfg.min_gain
     invested = sum(current.values(), ZERO)
     return Plan(

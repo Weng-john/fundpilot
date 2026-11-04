@@ -36,6 +36,20 @@ logs a warning.
 | `defi/aave/strategy.py` | allocator (below) |
 | `defi/aave/backtest.py` | backtester, baseline policies, synthetic series |
 
+## Chain selection
+
+By user preference (2026-11-04), the default chains exclude Ethereum mainnet because of gas: `LOW_GAS_CHAINS = polygon, arbitrum, base, optimism, avalanche`. Set them via:
+- `chains = [...]` in experiment TOMLs;
+- `--chains` on `fundpilot aave plan`;
+- `AllocatorConfig(allowed_chains=None)` to allow every chain.
+
+USDT reserves: Polygon (address-book symbol USDT0), Arbitrum, Optimism, Avalanche (USDt). Base has USDC only.
+
+**Costs are assumptions.**
+- The per-transaction gas values in the configs are placeholders.
+- The bridge cost dominates on low-gas chains (default 5 per cross-chain move), so set it from the bridge you would actually use.
+- On low-gas chains, frequent rebalancing is cheap. The synthetic demo then favours the naive APY chaser: 9.5 % vs 7.6 % net, with 66 vs 22 moves. This depends entirely on the assumed bridge cost and on synthetic data, so it is not a conclusion.
+
 ## Allocator
 
 For one stablecoin at a time (USDT or USDC):
@@ -79,7 +93,5 @@ uv run fundpilot aave backtest experiments/aave_usdc.toml           # on stored 
 uv run fundpilot aave backtest experiments/aave_usdt.toml --synthetic-demo
 ```
 
-On the synthetic demo (90 days, 100k, illustrative only; not market evidence), the naive chaser
-paid about 400 in costs over 46 moves, versus about 94 over 10 moves for the allocator and 13 for
-static. Which policy wins depends on the data. The utilisation guard deliberately gives up yield
+Synthetic demo results (illustrative only, not market evidence) are discussed under *Chain selection*. Which policy wins depends on the data. The utilisation guard deliberately gives up yield
 in exchange for withdrawal safety, which synthetic data does not reward.

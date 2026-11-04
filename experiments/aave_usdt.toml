@@ -3,7 +3,9 @@
 name = "aave_usdt"
 symbol = "USDT"
 capital = "100000"
-start_chain = "ethereum"
+start_chain = "polygon"
+# Low-gas chains only (Ethereum mainnet excluded by choice). Base has no USDT reserve.
+chains = ["polygon", "arbitrum", "optimism", "avalanche"]
 start = "2026-01-01T00:00:00+00:00"
 end = "2026-04-01T00:00:00+00:00"
 step_seconds = 3600
@@ -18,7 +20,7 @@ seed = 7
 [costs]
 bridge = 5
 [costs.tx]                    # per supply/withdraw transaction, ~USD (assumptions; update)
-ethereum = 8
+ethereum = 8                  # unused while Ethereum is excluded
 arbitrum = 0.3
 base = 0.2
 optimism = 0.2
@@ -27,7 +29,7 @@ avalanche = 0.3
 
 [[policies]]
 type = "static"
-chain = "ethereum"
+chain = "polygon"
 
 [[policies]]
 type = "chaser"

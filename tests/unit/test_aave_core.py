@@ -177,29 +177,29 @@ def snap(
 
 def test_allocator_splits_by_marginal_income() -> None:
     # two identical markets: a big deposit should be split, not dumped into one
-    snaps = {"ethereum:USDT": snap("ethereum"), "arbitrum:USDT": snap("arbitrum")}
+    snaps = {"polygon:USDT": snap("polygon"), "arbitrum:USDT": snap("arbitrum")}
     cfg = AllocatorConfig(
         chunk=D(10_000),
-        tx_cost={"ethereum": D(0), "arbitrum": D(0)},
+        tx_cost={"polygon": D(0), "arbitrum": D(0)},
         bridge_cost=D(0),
         min_gain=D(0),
     )
-    p = plan("USDT", snaps, {}, cfg, wallet=("ethereum", D(400_000)))
+    p = plan("USDT", snaps, {}, cfg, wallet=("polygon", D(400_000)))
     assert p.adopted
-    assert p.target["ethereum:USDT"] == p.target["arbitrum:USDT"] == D(200_000)
+    assert p.target["polygon:USDT"] == p.target["arbitrum:USDT"] == D(200_000)
 
 
 def test_allocator_respects_costs_and_hysteresis() -> None:
     better = snap("arbitrum", debt="870000")  # higher utilisation -> higher APR
-    snaps = {"ethereum:USDT": snap("ethereum"), "arbitrum:USDT": better}
+    snaps = {"polygon:USDT": snap("polygon"), "arbitrum:USDT": better}
     small = plan(
-        "USDT", snaps, {"ethereum:USDT": D(1000)}, AllocatorConfig(chunk=D(100), horizon_days=D(7))
+        "USDT", snaps, {"polygon:USDT": D(1000)}, AllocatorConfig(chunk=D(100), horizon_days=D(7))
     )
     assert not small.adopted and small.target == small.current  # gain < gas + bridge
     large = plan(
         "USDT",
         snaps,
-        {"ethereum:USDT": D(100_000)},
+        {"polygon:USDT": D(100_000)},
         AllocatorConfig(chunk=D(5000), horizon_days=D(30), spread_half_life_days=None),
     )
     assert large.adopted and large.target["arbitrum:USDT"] > 0
@@ -207,7 +207,7 @@ def test_allocator_respects_costs_and_hysteresis() -> None:
     decaying = plan(
         "USDT",
         snaps,
-        {"ethereum:USDT": D(100_000)},
+        {"polygon:USDT": D(100_000)},
         AllocatorConfig(chunk=D(5000), horizon_days=D(30)),
     )
     assert not decaying.adopted and decaying.expected_gain < large.expected_gain
@@ -216,26 +216,44 @@ def test_allocator_respects_costs_and_hysteresis() -> None:
 
 def test_allocator_guards() -> None:
     snaps = {
-        "ethereum:USDT": snap("ethereum"),
+        "polygon:USDT": snap("polygon"),
         "arbitrum:USDT": snap("arbitrum", debt="950000"),  # utilisation 95 % > 92 %
-        "polygon:USDT": snap("polygon", frozen=True),
+        "avalanche:USDT": snap("avalanche", frozen=True),
         "optimism:USDT": snap("optimism", cap="1005000"),  # 5000 headroom
     }
     cfg = AllocatorConfig(chunk=D(1000), tx_cost={}, bridge_cost=D(0), min_gain=D(0))
-    p = plan("USDT", snaps, {}, cfg, wallet=("ethereum", D(50_000)))
-    assert p.target["arbitrum:USDT"] == 0 and p.target["polygon:USDT"] == 0
+    p = plan("USDT", snaps, {}, cfg, wallet=("polygon", D(50_000)))
+    assert p.target["arbitrum:USDT"] == 0 and p.target["avalanche:USDT"] == 0
     assert p.target["optimism:USDT"] <= D(5000)
     assert sum(p.target.values()) == D(50_000)
     assert any("utilisation" in n for n in p.notes) and any("frozen" in n for n in p.notes)
 
 
 def test_allocator_only_moves_one_symbol() -> None:
-    snaps = {"ethereum:USDT": snap("ethereum"), "ethereum:USDC": snap("ethereum", "USDC")}
+    snaps = {"polygon:USDT": snap("polygon"), "polygon:USDC": snap("polygon", "USDC")}
     p = plan(
         "USDC",
         snaps,
-        {"ethereum:USDT": D(5000)},
-        wallet=("ethereum", D(1000)),
+        {"polygon:USDT": D(5000)},
+        wallet=("polygon", D(1000)),
         cfg=AllocatorConfig(min_gain=D(0)),
     )
-    assert set(p.target) == {"ethereum:USDC"}
+    assert set(p.target) == {"polygon:USDC"}
+
+
+def test_ethereum_excluded_by_default_low_gas_preference() -> None:
+    snaps = {
+        "ethereum:USDC": snap("ethereum", "USDC", debt="900000"),  # highest APR
+        "polygon:USDC": snap("polygon", "USDC"),
+        "base:USDC": snap("base", "USDC"),
+    }
+    p = plan("USDC", snaps, {}, AllocatorConfig(min_gain=D(0)), wallet=("polygon", D(20_000)))
+    assert "ethereum:USDC" not in p.target and p.adopted
+    everything = plan(
+        "USDC",
+        snaps,
+        {},
+        AllocatorConfig(min_gain=D(0), allowed_chains=None),
+        wallet=("polygon", D(20_000)),
+    )
+    assert "ethereum:USDC" in everything.target

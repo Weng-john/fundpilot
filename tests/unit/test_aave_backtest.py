@@ -127,3 +127,26 @@ def test_synthetic_series_is_tagged() -> None:
     series = _series(steps=3)
     assert all(s.origin.value == "synthetic" for _, snaps in series for s in snaps.values())
     assert series[1][0] - series[0][0] == timedelta(hours=1)
+
+
+def test_targeting_a_market_without_data_fails_loudly() -> None:
+    series = _series(steps=5)
+    with pytest.raises(ValueError, match="without data"):
+        simulate(
+            series,
+            StaticPolicy("polygon:USDC"),
+            BacktestConfig("USDC", D(1000), "polygon", costs=NO_COST),
+        )
+
+
+def test_same_chain_wallet_deposit_has_no_bridge_cost() -> None:
+    from fundpilot.defi.aave.strategy import move_cost  # noqa: PLC0415
+
+    cfg = AllocatorConfig()
+    assert move_cost("wallet:polygon", "polygon:USDT", cfg) == cfg.tx_cost["polygon"]
+    assert move_cost("wallet:polygon", "arbitrum:USDT", cfg) == (
+        cfg.tx_cost["arbitrum"] + cfg.bridge_cost
+    )
+    assert move_cost("polygon:USDT", "arbitrum:USDT", cfg) == (
+        cfg.tx_cost["polygon"] + cfg.tx_cost["arbitrum"] + cfg.bridge_cost
+    )

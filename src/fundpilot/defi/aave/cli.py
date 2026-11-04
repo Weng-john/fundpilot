@@ -29,7 +29,7 @@ from fundpilot.defi.aave.backtest import (
 )
 from fundpilot.defi.aave.math import RateModel, apr_to_apy
 from fundpilot.defi.aave.reader import read_snapshot
-from fundpilot.defi.aave.strategy import AllocatorConfig, plan
+from fundpilot.defi.aave.strategy import LOW_GAS_CHAINS, AllocatorConfig, plan
 from fundpilot.defi.rpc import JsonRpcClient, RpcError
 
 D = Decimal
@@ -47,7 +47,12 @@ def add_parser(sub: Any, sessions_factory: Any) -> None:
     pl = a_sub.add_parser("plan", help="dry-run allocation for an amount (latest snapshots)")
     pl.add_argument("--symbol", choices=["USDT", "USDC"], required=True)
     pl.add_argument("--amount", type=Decimal, required=True, help="idle amount to place")
-    pl.add_argument("--chain", default="ethereum", help="where the idle amount sits")
+    pl.add_argument("--chain", default="polygon", help="where the idle amount sits")
+    pl.add_argument(
+        "--chains",
+        default=",".join(LOW_GAS_CHAINS),
+        help="chains the allocator may use (default: low-gas, no Ethereum mainnet)",
+    )
     pl.add_argument(
         "--position",
         action="append",
@@ -173,7 +178,7 @@ def _policies(raw: dict[str, Any], symbol: str, alloc_cfg: AllocatorConfig) -> l
         if kind == "static":
             out.append(StaticPolicy(f"{p['chain']}:{symbol}"))
         elif kind == "chaser":
-            out.append(ChaserPolicy(symbol))
+            out.append(ChaserPolicy(symbol, alloc_cfg.allowed_chains))
         elif kind == "allocator":
             out.append(AllocatorPolicy(symbol, alloc_cfg))
         else:
@@ -241,9 +246,11 @@ def cmd_backtest(settings: Any, args: argparse.Namespace, sessions_factory: Any)
             for m in raw.get(
                 "synthetic_markets",
                 [
-                    {"chain": "ethereum", "supplied": 3e9, "mean_usage": 0.82},
+                    {"chain": "polygon", "supplied": 3e8, "mean_usage": 0.82},
                     {"chain": "arbitrum", "supplied": 4e8, "mean_usage": 0.86},
                     {"chain": "base", "supplied": 1.5e8, "mean_usage": 0.88},
+                    {"chain": "optimism", "supplied": 1e8, "mean_usage": 0.85},
+                    {"chain": "avalanche", "supplied": 1.5e8, "mean_usage": 0.87},
                 ],
             )
         ]

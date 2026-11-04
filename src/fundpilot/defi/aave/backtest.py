@@ -68,6 +68,7 @@ class ChaserPolicy:
     """Naive: move everything to the highest *observed* APR, ignoring impact and costs."""
 
     symbol: str
+    chains: tuple[str, ...] | None = None
 
     @property
     def name(self) -> str:
@@ -76,7 +77,13 @@ class ChaserPolicy:
     def target(
         self, snaps: Snapshots, positions: Mapping[str, Decimal], wallet: tuple[str, Decimal] | None
     ) -> dict[str, Decimal] | None:
-        cands = [s for s in snaps.values() if s.symbol == self.symbol and s.tradable]
+        cands = [
+            s
+            for s in snaps.values()
+            if s.symbol == self.symbol
+            and s.tradable
+            and (self.chains is None or s.chain in self.chains)
+        ]
         if not cands:
             return None
         best = max(cands, key=lambda s: s.supply_apr).key
@@ -189,6 +196,9 @@ def simulate(
             observed = {k: _with_us(s, positions.get(k, ZERO)) for k, s in snaps.items()}
             target = policy.target(observed, positions, wallet)
             if target is not None:
+                unknown = [k for k, v in target.items() if v > 0 and k not in snaps]
+                if unknown:
+                    raise ValueError(f"{policy.name} targets markets without data: {unknown}")
                 spent, n, b, wallet = _execute(positions, target, wallet, snaps, cfg)
                 costs += spent
                 moves += n

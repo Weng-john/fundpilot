@@ -134,3 +134,12 @@ Check `git log` for which parts landed.
 5. Optional: wire Aave snapshots into the dashboard and agent analytics.
 
 **Synthetic-demo observation** (not evidence): the naive APY chaser loses heavily to gas/bridge costs on small capital. The 92 % utilisation guard costs yield on synthetic data, because withdrawal lock-ups rarely bind there. Do not tune on synthetic data.
+
+**Update 2026-11-04 (user preference): low-gas chains only.**
+- Ethereum mainnet is excluded by default: `LOW_GAS_CHAINS` = polygon, arbitrum, base, optimism, avalanche.
+- Fixed in the same change:
+  - same-chain wallet deposits were wrongly charged a bridge fee;
+  - deploying idle capital no longer decays with the spread half-life;
+  - the backtester now raises if a policy targets a market without data. Before, it silently earned 0 %.
+- Synthetic demo (low-gas chains): static 4.9 %, chaser 9.5 % (66 moves), allocator 7.6 % (22 moves). This depends on the assumed bridge cost of 5; not evidence.
+- RPC hosts still needed for the chosen chains, e.g. publicnode endpoints for Polygon/Arbitrum/Base/Optimism/Avalanche (names unverified).
