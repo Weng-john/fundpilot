@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import json
-import statistics
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
-
 from fundpilot.core.time import utc_now
 from fundpilot.data.db import session_scope
-from fundpilot.data.models import CexEarnRateRow, DefiReserveSnapshotRow, FundingTradeRow
+from fundpilot.data.models import CexEarnRateRow
 from fundpilot.data.repository import insert_ignore
 from fundpilot.exchanges.okx.earn import OkxEarnClient
 
@@ -33,6 +30,15 @@ def add_parser(sub: Any, sessions_factory: Any) -> None:
     c.add_argument("--days", type=int, default=30)
     c.add_argument("--bitfinex-fee", type=Decimal, default=Decimal("0.15"))
     c.set_defaults(func=lambda st, a: cmd_compare(st, a, sessions_factory))
+    cy = sub.add_parser(
+        "collect-yields", help="append OKX Flexible + Aave observations to CSV files (no DB)"
+    )
+    cy.add_argument("--csv-dir", required=True)
+    cy.add_argument("--okx-hours", type=int, default=48, help="OKX history window per run")
+    cy.set_defaults(func=cmd_collect_yields)
+    iy = sub.add_parser("import-yields", help="load collected CSV files into the database")
+    iy.add_argument("--csv-dir", required=True)
+    iy.set_defaults(func=lambda st, a: cmd_import_yields(st, a, sessions_factory))
 
 
 def _print(obj: object) -> None:
@@ -75,74 +81,45 @@ def cmd_backfill(settings: Any, args: Any, sessions_factory: Any) -> int:
     return 0
 
 
-def _stats(values: list[float]) -> dict[str, Any]:
-    if not values:
-        return {"n": 0}
-    v = sorted(values)
-    return {
-        "n": len(v),
-        "mean": round(statistics.mean(v) * 100, 3),
-        "median": round(statistics.median(v) * 100, 3),
-        "p10": round(v[len(v) // 10] * 100, 3),
-        "p90": round(v[9 * len(v) // 10] * 100, 3),
-    }
-
-
 def cmd_compare(settings: Any, args: Any, sessions_factory: Any) -> int:
+    from fundpilot.yields.compare import collect, summary  # noqa: PLC0415
+
     end = utc_now()
     start = end - timedelta(days=args.days)
-    fee = float(args.bitfinex_fee)
-    out: dict[str, Any] = {"window": [start, end], "unit": "% per year, simple", "venues": {}}
     with sessions_factory(settings) as sessions, session_scope(sessions) as s:
-        trades = (
-            s.execute(
-                select(FundingTradeRow.rate).where(
-                    FundingTradeRow.symbol == "fUST",
-                    FundingTradeRow.amount < 0,
-                    FundingTradeRow.period_days == 2,
-                    FundingTradeRow.executed_at >= start,
-                    FundingTradeRow.origin == "exchange_api",
-                )
-            )
-            .scalars()
-            .all()
-        )
-        out["venues"]["bitfinex_fUST_2d_taken"] = {
-            "basis": f"rates of executed 2-day loans (funding taken) x365 x(1-{fee}); "
-            "fills for our own offers are NOT guaranteed",
-            **_stats([float(r) * 365 * (1 - fee) for r in trades]),
-        }
-        for ccy in ("USDT", "USDC"):
-            rows = (
-                s.execute(
-                    select(CexEarnRateRow.lending_rate).where(
-                        CexEarnRateRow.venue == "okx",
-                        CexEarnRateRow.ccy == ccy,
-                        CexEarnRateRow.observed_at >= start,
-                        CexEarnRateRow.lending_rate.is_not(None),
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            out["venues"][f"okx_flexible_{ccy}"] = {
-                "basis": "hourly lendingRate (believed net of OKX's 15 %)",
-                **_stats([float(r) for r in rows if r is not None]),
-            }
-        snaps = (
-            s.execute(
-                select(DefiReserveSnapshotRow).where(DefiReserveSnapshotRow.observed_at >= start)
-            )
-            .scalars()
-            .all()
-        )
-        by_key: dict[str, list[float]] = {}
-        for x in snaps:
-            by_key.setdefault(f"aave_{x.chain}_{x.symbol}", []).append(float(x.supply_apr))
-        for k, v in sorted(by_key.items()):
-            out["venues"][k] = {
-                "basis": "supply APR snapshots (net of reserve factor)",
-                **_stats(v),
-            }
+        series = collect(s, start, end, bitfinex_fee=float(args.bitfinex_fee))
+    out = summary(series)
+    out["window"] = [start, end]
+    for v in out["venues"]:
+        for k in ("mean", "median", "p10", "p90", "last"):
+            if k in v:
+                v[k] = round(v[k] * 100, 3)
+    out["unit"] = "net APR, % per year (simple)"
     _print(out)
+    return 0
+
+
+def cmd_collect_yields(settings: Any, args: Any) -> int:
+    from pathlib import Path  # noqa: PLC0415
+
+    from fundpilot.yields.csvstore import collect_aave, collect_okx  # noqa: PLC0415
+
+    directory = Path(args.csv_dir)
+    result: dict[str, Any] = {"okx": collect_okx(directory, args.okx_hours)}
+    if settings.aave_rpc_urls:
+        result["aave"] = collect_aave(directory, settings.aave_rpc_urls)
+    else:
+        result["aave"] = "skipped: FUNDPILOT_AAVE_RPC_URLS not set"
+    _print(result)
+    aave = result["aave"]
+    return 1 if isinstance(aave, dict) and aave.get("errors") else 0
+
+
+def cmd_import_yields(settings: Any, args: Any, sessions_factory: Any) -> int:
+    from pathlib import Path  # noqa: PLC0415
+
+    from fundpilot.yields.csvstore import import_dir  # noqa: PLC0415
+
+    with sessions_factory(settings) as sessions, session_scope(sessions) as s:
+        _print(import_dir(s, Path(args.csv_dir)))
     return 0

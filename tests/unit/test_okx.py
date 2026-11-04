@@ -98,5 +98,36 @@ def test_compare_yields_runs_on_empty_db(db_env: str, capsys: pytest.CaptureFixt
     capsys.readouterr()
     assert cli.main(["compare-yields", "--days", "7"]) == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["venues"]["okx_flexible_USDT"]["n"] == 0
-    assert "NOT guaranteed" in out["venues"]["bitfinex_fUST_2d_taken"]["basis"]
+    venues = {v["key"]: v for v in out["venues"]}
+    assert venues["okx_flexible_USDT"]["n"] == 0
+    assert venues["bitfinex_fUST_2d"]["available"] is False
+    assert "Taiwan" in venues["bitfinex_fUST_2d"]["note"]
+    assert out["best_available_by_median"] is None
+
+
+def test_csv_collect_and_import_roundtrip(tmp_path: Path) -> None:
+    from fundpilot.data.db import create_db_engine, make_session_factory, session_scope  # noqa: PLC0415
+    from fundpilot.data.models import Base, CexEarnRateRow  # noqa: PLC0415
+    from fundpilot.yields.csvstore import collect_okx, import_dir  # noqa: PLC0415
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        after = req.url.params.get("after")
+        rows = [] if after else [_hist_row(h) for h in range(3)]
+        return httpx.Response(200, json={"code": "0", "msg": "", "data": rows})
+
+    client = OkxEarnClient(
+        "https://okx.invalid",
+        transport=httpx.MockTransport(handler),
+        limiter=TokenBucket(6000, burst=100),
+    )
+    # window relative to wall clock: use a huge window so the fixed fixture times are inside
+    assert collect_okx(tmp_path, hours=24 * 365 * 5, ccys=("USDT",), client=client) == {"USDT": 3}
+    assert collect_okx(tmp_path, hours=24 * 365 * 5, ccys=("USDT",), client=client) == {"USDT": 0}
+    engine = create_db_engine(f"sqlite:///{tmp_path / 'db.sqlite'}")
+    Base.metadata.create_all(engine)
+    sessions = make_session_factory(engine)
+    with session_scope(sessions) as s:
+        assert import_dir(s, tmp_path) == {"okx_flexible_USDT.csv": 3}
+        assert import_dir(s, tmp_path) == {"okx_flexible_USDT.csv": 0}
+        assert s.query(CexEarnRateRow).count() == 3
+    engine.dispose()
